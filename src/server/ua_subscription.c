@@ -202,7 +202,8 @@ UA_Subscription_deleteMonitoredItem(UA_Server *server, UA_Subscription *sub,
 				{
 					const UA_DataSource *dataSource = &varTarget->value.dataSource;
 
-					dataSource->monitored(dataSource->handle, varTarget->nodeId, true);
+					if (dataSource->monitored != NULL)
+						dataSource->monitored(dataSource->handle, varTarget->nodeId, true);
 					// FIXME: use returned status code to generate (user) feedback etc...?
 				}
 			}

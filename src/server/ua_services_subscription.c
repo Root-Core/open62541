@@ -180,7 +180,8 @@ Service_CreateMonitoredItems_single(UA_Server *server, UA_Session *session, UA_S
 		{
 			const UA_DataSource *dataSource = &varTarget->value.dataSource;
 
-			dataSource->monitored(dataSource->handle, varTarget->nodeId, false);
+			if (dataSource->monitored != NULL)
+				dataSource->monitored(dataSource->handle, varTarget->nodeId, false);
 		}
 	}
 }
