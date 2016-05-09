@@ -255,7 +255,7 @@ int main(int argc, char** argv) {
     if((temperatureFile = fopen(temperatureFileName, "r"))) {
         // add node with the data source
         UA_DataSource temperatureDataSource = (UA_DataSource) {
-            .handle = NULL, .read = readTemperature, .write = NULL};
+            .handle = NULL, .read = readTemperature, .write = NULL, .monitored = NULL};
         const UA_QualifiedName tempName = UA_QUALIFIEDNAME(1, "cpu temperature");
         UA_VariableAttributes_init(&v_attr);
         v_attr.description = UA_LOCALIZEDTEXT("en_US","temperature");
@@ -282,7 +282,7 @@ int main(int argc, char** argv) {
 
             // add node with the LED status data source
             UA_DataSource ledStatusDataSource = (UA_DataSource) {
-                .handle = NULL, .read = readLedStatus, .write = writeLedStatus};
+                .handle = NULL, .read = readLedStatus, .write = writeLedStatus, .monitored = NULL};
             UA_VariableAttributes_init(&v_attr);
             v_attr.description = UA_LOCALIZEDTEXT("en_US","status LED");
             v_attr.displayName = UA_LOCALIZEDTEXT("en_US","status LED");
