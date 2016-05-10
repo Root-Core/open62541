@@ -191,6 +191,23 @@ UA_Subscription_deleteMonitoredItem(UA_Server *server, UA_Subscription *sub,
     UA_MonitoredItem *mon;
     LIST_FOREACH(mon, &sub->MonitoredItems, listEntry) {
         if(mon->itemId == monitoredItemID) {
+			const UA_Node *target = UA_NodeStore_get(server->nodestore, &mon->monitoredNodeId);
+
+			// Triggering monitored callback on DataSource nodes
+			if (target->nodeClass == UA_NODECLASS_VARIABLE)
+			{
+				const UA_VariableNode *varTarget = (const UA_VariableNode*)target;
+
+				if (varTarget->valueSource == UA_VALUESOURCE_DATASOURCE)
+				{
+					const UA_DataSource *dataSource = &varTarget->value.dataSource;
+
+					if (dataSource->monitored != NULL)
+						dataSource->monitored(dataSource->handle, varTarget->nodeId, true);
+					// FIXME: use returned status code to generate (user) feedback etc...?
+				}
+			}
+
             LIST_REMOVE(mon, listEntry);
             MonitoredItem_delete(server, mon);
             return UA_STATUSCODE_GOOD;

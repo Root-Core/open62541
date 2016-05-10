@@ -828,7 +828,7 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     namespaceArray->nodeId.identifier.numeric = UA_NS0ID_SERVER_NAMESPACEARRAY;
     namespaceArray->valueSource = UA_VALUESOURCE_DATASOURCE;
     namespaceArray->value.dataSource = (UA_DataSource) {.handle = server, .read = readNamespaces,
-                                                        .write = NULL};
+                                                        .write = NULL, .monitored = NULL};
     namespaceArray->valueRank = 1;
     namespaceArray->minimumSamplingInterval = 1.0;
     addNodeInternal(server, (UA_Node*)namespaceArray, UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER), nodeIdHasProperty);
@@ -937,7 +937,7 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     copyNames((UA_Node*)serverstatus, "ServerStatus");
     serverstatus->nodeId = UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER_SERVERSTATUS);
     serverstatus->valueSource = UA_VALUESOURCE_DATASOURCE;
-    serverstatus->value.dataSource = (UA_DataSource) {.handle = server, .read = readStatus, .write = NULL};
+    serverstatus->value.dataSource = (UA_DataSource) {.handle = server, .read = readStatus, .write = NULL, .monitored = NULL};
     addNodeInternal(server, (UA_Node*)serverstatus, UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER), nodeIdHasComponent);
     addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER_SERVERSTATUS), nodeIdHasTypeDefinition,
                          UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_SERVERSTATUSTYPE), true);
@@ -958,7 +958,7 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     currenttime->nodeId = UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER_SERVERSTATUS_CURRENTTIME);
     currenttime->valueSource = UA_VALUESOURCE_DATASOURCE;
     currenttime->value.dataSource = (UA_DataSource) {.handle = NULL, .read = readCurrentTime,
-                                                     .write = NULL};
+                                                     .write = NULL, .monitored = NULL};
     addNodeInternal(server, (UA_Node*)currenttime,
                     UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER_SERVERSTATUS), nodeIdHasComponent);
     addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER_SERVERSTATUS_CURRENTTIME),
