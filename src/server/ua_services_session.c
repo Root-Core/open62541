@@ -143,7 +143,7 @@ Service_ActivateSession(UA_Server *server, UA_Session *session, const UA_Activat
 		{
 			struct sockaddr_in addr;
 			socklen_t addrlen = sizeof(struct sockaddr_in);
-			getpeername(channel->connection->sockfd, &addr, &addrlen);
+			getpeername(channel->connection->sockfd, (struct sockaddr*)&addr, &addrlen);
 
 			if (server->config.authCallback(&token->userName, &token->password, &addr))
 			{
