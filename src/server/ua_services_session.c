@@ -3,6 +3,16 @@
 #include "ua_session_manager.h"
 #include "ua_types_generated_encoding_binary.h"
 
+
+#ifdef _WIN32
+# include <winsock2.h>
+#else
+# include <netinet/in.h>
+#endif
+
+
+
+
 void Service_CreateSession(UA_Server *server, UA_Session *session, const UA_CreateSessionRequest *request,
                            UA_CreateSessionResponse *response) {
     UA_SecureChannel *channel = session->channel;
