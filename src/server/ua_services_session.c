@@ -6,6 +6,7 @@
 
 #ifdef _WIN32
 # include <winsock2.h>
+# include <ws2tcpip.h>
 #else
 # include <netinet/in.h>
 #endif
@@ -141,7 +142,7 @@ Service_ActivateSession(UA_Server *server, UA_Session *session, const UA_Activat
 		if (server->config.authCallback != NULL)
 		{
 			struct sockaddr_in addr;
-			int addrlen = sizeof(struct sockaddr_in);
+			socklen_t addrlen = sizeof(struct sockaddr_in);
 			getpeername(channel->connection->sockfd, &addr, &addrlen);
 
 			if (server->config.authCallback(&token->userName, &token->password, &addr))
