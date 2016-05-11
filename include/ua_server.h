@@ -34,6 +34,9 @@ extern "C" {
 # include <ws2tcpip.h>
 #else
 # include <netinet/in.h>
+# ifdef __QNX__
+#  include <sys/socket.h>
+# endif
 #endif
 
 /**
