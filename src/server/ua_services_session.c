@@ -11,9 +11,6 @@
 # include <netinet/in.h>
 #endif
 
-
-
-
 void Service_CreateSession(UA_Server *server, UA_Session *session, const UA_CreateSessionRequest *request,
                            UA_CreateSessionResponse *response) {
     UA_SecureChannel *channel = session->channel;
