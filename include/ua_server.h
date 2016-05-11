@@ -28,6 +28,14 @@ extern "C" {
 #include "ua_job.h"
 #include "ua_connection.h"
 
+
+#ifdef _WIN32
+# include <winsock2.h>
+# include <ws2tcpip.h>
+#else
+# include <netinet/in.h>
+#endif
+
 /**
  * Server
  * ======
