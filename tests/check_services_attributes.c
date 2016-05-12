@@ -48,7 +48,7 @@ static UA_Server* makeTestSequence(void) {
     /* DataSource VariableNode */
     UA_VariableAttributes_init(&vattr);
     UA_DataSource temperatureDataSource = (UA_DataSource) {
-                                           .handle = NULL, .read = NULL, .write = NULL};
+                                           .handle = NULL, .read = NULL, .write = NULL, .monitored = NULL};
     vattr.description = UA_LOCALIZEDTEXT("en_US","temperature");
     vattr.displayName = UA_LOCALIZEDTEXT("en_US","temperature");
     UA_Server_addDataSourceVariableNode(server, UA_NODEID_STRING(1, "cpu.temperature"),
@@ -59,7 +59,7 @@ static UA_Server* makeTestSequence(void) {
     
     /* DataSource Variable returning no value */
     UA_DataSource temperatureDataSource1 = (UA_DataSource) {
-                                            .handle = NULL, .read = readCPUTemperature_broken, .write = NULL};
+                                            .handle = NULL, .read = readCPUTemperature_broken, .write = NULL, .monitored = NULL};
     vattr.description = UA_LOCALIZEDTEXT("en_US","temperature1");
     vattr.displayName = UA_LOCALIZEDTEXT("en_US","temperature1");
     UA_Server_addDataSourceVariableNode(server, UA_NODEID_STRING(1, "cpu.temperature1"),

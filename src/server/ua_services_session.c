@@ -3,6 +3,7 @@
 #include "ua_session_manager.h"
 #include "ua_types_generated_encoding_binary.h"
 
+
 #ifdef _WIN32
 # include <ws2tcpip.h>
 # undef SLIST_ENTRY // fixes amalgation

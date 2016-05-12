@@ -170,6 +170,20 @@ Service_CreateMonitoredItems_single(UA_Server *server, UA_Session *session, UA_S
     result->revisedSamplingInterval = newMon->samplingInterval;
     result->revisedQueueSize = newMon->maxQueueSize;
     result->monitoredItemId = newMon->itemId;
+
+	// Triggering monitored callback on DataSource nodes
+	if (target->nodeClass == UA_NODECLASS_VARIABLE)
+	{
+		const UA_VariableNode *varTarget = (const UA_VariableNode*)target;
+
+		if (varTarget->valueSource == UA_VALUESOURCE_DATASOURCE)
+		{
+			const UA_DataSource *dataSource = &varTarget->value.dataSource;
+
+			if (dataSource->monitored != NULL)
+				dataSource->monitored(dataSource->handle, varTarget->nodeId, false);
+		}
+	}
 }
 
 void

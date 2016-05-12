@@ -200,9 +200,22 @@ nodeIter(UA_NodeId childId, UA_Boolean isInverse, UA_NodeId referenceTypeId, voi
 }
 
 static UA_StatusCode
+monitoredHandler(void *handle, const UA_NodeId nodeid, const UA_Boolean removed)
+{
+    // This handler can help managing the DataSources, e.g. activating them, etc..
+
+	if (removed)
+        printf("Stop monitoring Node ns=%d; id=%d\n", nodeid.namespaceIndex, nodeid.identifier.numeric);
+	else
+        printf("Start monitoring Node ns=%d; id=%d\n", nodeid.namespaceIndex, nodeid.identifier.numeric);
+
+    return UA_STATUSCODE_GOOD;
+}
+
+static UA_StatusCode
 instantiationHandle(UA_NodeId newNodeId, UA_NodeId templateId, void *handle ) {
-  printf("Instantiated Node ns=%d; id=%d from ns=%d; id=%d\n", newNodeId.namespaceIndex, newNodeId.identifier.numeric, templateId.namespaceIndex, templateId.identifier.numeric);
-  return UA_STATUSCODE_GOOD;
+    printf("Instantiated Node ns=%d; id=%d from ns=%d; id=%d\n", newNodeId.namespaceIndex, newNodeId.identifier.numeric, templateId.namespaceIndex, templateId.identifier.numeric);
+    return UA_STATUSCODE_GOOD;
 }
 
 int main(int argc, char** argv) {
@@ -219,7 +232,8 @@ int main(int argc, char** argv) {
     UA_Server *server = UA_Server_new(config);
 
     // add node with the datetime data source
-    UA_DataSource dateDataSource = (UA_DataSource) {.handle = NULL, .read = readTimeData, .write = NULL};
+    UA_DataSource dateDataSource = (UA_DataSource) {.handle = NULL, .read = readTimeData,
+		.write = NULL, .monitored = monitoredHandler};
     UA_VariableAttributes v_attr;
     UA_VariableAttributes_init(&v_attr);
     v_attr.description = UA_LOCALIZEDTEXT("en_US","current time");
@@ -241,7 +255,7 @@ int main(int argc, char** argv) {
     if((temperatureFile = fopen(temperatureFileName, "r"))) {
         // add node with the data source
         UA_DataSource temperatureDataSource = (UA_DataSource) {
-            .handle = NULL, .read = readTemperature, .write = NULL};
+            .handle = NULL, .read = readTemperature, .write = NULL, .monitored = NULL};
         const UA_QualifiedName tempName = UA_QUALIFIEDNAME(1, "cpu temperature");
         UA_VariableAttributes_init(&v_attr);
         v_attr.description = UA_LOCALIZEDTEXT("en_US","temperature");
@@ -268,7 +282,7 @@ int main(int argc, char** argv) {
 
             // add node with the LED status data source
             UA_DataSource ledStatusDataSource = (UA_DataSource) {
-                .handle = NULL, .read = readLedStatus, .write = writeLedStatus};
+                .handle = NULL, .read = readLedStatus, .write = writeLedStatus, .monitored = NULL};
             UA_VariableAttributes_init(&v_attr);
             v_attr.description = UA_LOCALIZEDTEXT("en_US","status LED");
             v_attr.displayName = UA_LOCALIZEDTEXT("en_US","status LED");
