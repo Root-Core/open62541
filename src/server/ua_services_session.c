@@ -116,25 +116,25 @@ Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session
             return;
         }
 		
-		/* trying to use callback to auth user */
-		if (server->config.authCallback != NULL)
-		{
-			struct sockaddr_in addr;
-			socklen_t addrlen = sizeof(struct sockaddr_in);
-			getpeername(channel->connection->sockfd, (struct sockaddr*)&addr, &addrlen);
+        /* trying to use callback to auth user */
+        if (server->config.authCallback != NULL)
+        {
+            struct sockaddr_in addr;
+            socklen_t addrlen = sizeof(struct sockaddr_in);
+            getpeername(channel->connection->sockfd, (struct sockaddr*)&addr, &addrlen);
 
-			if (server->config.authCallback(&token->userName, &token->password, &addr))
-			{
-				/* success - activate */
-				/* FIXME: This is used 3 times.. we could make it a function */
-				if (foundSession->channel && foundSession->channel != channel)
-					UA_SecureChannel_detachSession(foundSession->channel, foundSession);
-				UA_SecureChannel_attachSession(channel, foundSession);
-				foundSession->activated = true;
-				UA_Session_updateLifetime(foundSession);
-				return;
-			}
-		}
+            if (server->config.authCallback(&token->userName, &token->password, &addr))
+            {
+                /* success - activate */
+                /* FIXME: This is used 3 times.. we could make it a function */
+                if (session->channel && session->channel != channel)
+                    UA_SecureChannel_detachSession(session->channel, session);
+                UA_SecureChannel_attachSession(channel, session);
+                session->activated = true;
+                UA_Session_updateLifetime(session);
+                return;
+            }
+        }
 
         /* ok, trying to match the username */
         for(size_t i = 0; i < server->config.usernamePasswordLoginsSize; i++) {
