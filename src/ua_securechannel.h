@@ -18,7 +18,6 @@ struct SessionEntry {
 struct ChunkEntry {
     LIST_ENTRY(ChunkEntry) pointers;
     UA_UInt32 requestId;
-    UA_Boolean invalid_message;
     UA_ByteString bytes;
 };
 
@@ -60,5 +59,54 @@ UA_StatusCode UA_SecureChannel_sendBinaryMessage(UA_SecureChannel *channel, UA_U
                                                   const void *content, const UA_DataType *contentType);
 
 void UA_SecureChannel_revolveTokens(UA_SecureChannel *channel);
+
+/**
+ * Chunking
+ * -------- */
+/* Pos is initially set to the beginning of the chunk content. chunklength is
+   the length of the decoded chunk content (minus header, padding, etc.) */
+void UA_SecureChannel_appendChunk(UA_SecureChannel *channel, UA_UInt32 requestId,
+                                  const UA_ByteString *msg, size_t pos, size_t chunklength);
+
+/* deleteChunk indicates if the returned bytestring was copied off the network
+   buffer (and needs to be freed) or points into the msg */
+UA_ByteString UA_SecureChannel_finalizeChunk(UA_SecureChannel *channel, UA_UInt32 requestId,
+                                             const UA_ByteString *msg, size_t pos, size_t chunklength,
+                                             UA_Boolean *deleteChunk);
+
+void UA_SecureChannel_removeChunk(UA_SecureChannel *channel, UA_UInt32 requestId);
+
+/**
+ * Log Helper
+ * ---------- */
+#define UA_LOG_TRACE_CHANNEL(LOGGER, CHANNEL, MSG, ...)                 \
+    UA_LOG_TRACE(LOGGER, UA_LOGCATEGORY_SECURECHANNEL, "Connection %i | SecureChannel %i | " MSG, \
+                 (CHANNEL->connection ? CHANNEL->connection->sockfd : 0), \
+                 CHANNEL->securityToken.channelId, ##__VA_ARGS__);
+
+#define UA_LOG_DEBUG_CHANNEL(LOGGER, CHANNEL, MSG, ...)                 \
+    UA_LOG_DEBUG(LOGGER, UA_LOGCATEGORY_SECURECHANNEL, "Connection %i | SecureChannel %i | " MSG, \
+                 (CHANNEL->connection ? CHANNEL->connection->sockfd : 0), \
+                 CHANNEL->securityToken.channelId, ##__VA_ARGS__);
+
+#define UA_LOG_INFO_CHANNEL(LOGGER, CHANNEL, MSG, ...)                   \
+    UA_LOG_INFO(LOGGER, UA_LOGCATEGORY_SECURECHANNEL, "Connection %i | SecureChannel %i | " MSG, \
+                (CHANNEL->connection ? CHANNEL->connection->sockfd : 0), \
+                CHANNEL->securityToken.channelId, ##__VA_ARGS__);
+
+#define UA_LOG_WARNING_CHANNEL(LOGGER, CHANNEL, MSG, ...)               \
+    UA_LOG_WARNING(LOGGER, UA_LOGCATEGORY_SECURECHANNEL, "Connection %i | SecureChannel %i | " MSG, \
+                   (CHANNEL->connection ? CHANNEL->connection->sockfd : 0), \
+                   CHANNEL->securityToken.channelId, ##__VA_ARGS__);
+
+#define UA_LOG_ERROR_CHANNEL(LOGGER, CHANNEL, MSG, ...)                 \
+    UA_LOG_ERROR(LOGGER, UA_LOGCATEGORY_SECURECHANNEL, "Connection %i | SecureChannel %i | " MSG, \
+                 (CHANNEL->connection ? CHANNEL->connection->sockfd : 0), \
+                 CHANNEL->securityToken.channelId, ##__VA_ARGS__);
+
+#define UA_LOG_FATAL_CHANNEL(LOGGER, CHANNEL, MSG, ...)                 \
+    UA_LOG_FATAL(LOGGER, UA_LOGCATEGORY_SECURECHANNEL, "Connection %i | SecureChannel %i | " MSG, \
+                 (CHANNEL->connection ? CHANNEL->connection->sockfd : 0), \
+                 CHANNEL->securityToken.channelId, ##__VA_ARGS__);
 
 #endif /* UA_SECURECHANNEL_H_ */
