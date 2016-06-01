@@ -92,7 +92,7 @@ Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session
             response->responseHeader.serviceResult = UA_STATUSCODE_BADIDENTITYTOKENINVALID;
             return;
         }
-		/* if the callback is defined ... */
+        /* if the callback is defined ... */
         else if (server->config.authCallback != NULL) {
             /* ... we have to check, whether it denies the anonymous access or not */
             if (!server->config.authCallback(NULL, NULL, &addr)) {

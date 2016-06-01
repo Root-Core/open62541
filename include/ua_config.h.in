@@ -32,10 +32,12 @@ extern "C" {
 #cmakedefine UA_ENABLE_METHODCALLS
 #cmakedefine UA_ENABLE_SUBSCRIPTIONS
 #cmakedefine UA_ENABLE_TYPENAMES
-#cmakedefine UA_ENABLE_EMBEDDED_LIBC
 #cmakedefine UA_ENABLE_GENERATE_NAMESPACE0
 #cmakedefine UA_ENABLE_EXTERNAL_NAMESPACES
 #cmakedefine UA_ENABLE_NODEMANAGEMENT
+
+#cmakedefine UA_ENABLE_EMBEDDED_LIBC
+#cmakedefine UA_ENABLE_EMBEDDED_CLOCK
 
 #cmakedefine UA_ENABLE_NONSTANDARD_UDP
 #cmakedefine UA_ENABLE_NONSTANDARD_STATELESS
@@ -170,11 +172,11 @@ extern "C" {
 
 #ifndef UA_BINARY_OVERLAYABLE_INTEGER
 # define UA_BINARY_OVERLAYABLE_INTEGER false
-# warning Slow Integer Encoding
+# warning Slow Integer Encoding. This warning can be removed safely. It is only an indicator that integer endianness could not be detected.
 #endif
 #ifndef UA_BINARY_OVERLAYABLE_FLOAT
 # define UA_BINARY_OVERLAYABLE_FLOAT false
-# warning Slow Float Encoding
+# warning Slow Float Encoding. This warning can be removed safely. It is only an indicator that the float encoding could not be detected.
 #endif
 
 #if defined(__clang__)
