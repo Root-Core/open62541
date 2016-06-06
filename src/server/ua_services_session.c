@@ -46,8 +46,8 @@ void Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
         UA_SessionManager_removeSession(&server->sessionManager, &newSession->authenticationToken);
          return;
     }
-    UA_LOG_DEBUG_CHANNEL(server->config.logger, channel, "Session %i created",
-                         newSession->sessionId.identifier.numeric);
+    UA_LOG_DEBUG_CHANNEL(server->config.logger, channel, "Session " PRINTF_GUID_FORMAT " created",
+                         PRINTF_GUID_DATA(newSession->sessionId));
 }
 
 void
@@ -66,7 +66,7 @@ Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session
         UA_LOG_INFO_SESSION(server->config.logger, session, "ActivateSession: SecureChannel %i wants "
                             "to activate, but the UserIdentify token is invalid",
                             channel->securityToken.channelId);
-        response->responseHeader.serviceResult = UA_STATUSCODE_BADINTERNALERROR;
+        response->responseHeader.serviceResult = UA_STATUSCODE_BADIDENTITYTOKENINVALID;
         return;
     }
 
@@ -118,6 +118,12 @@ Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session
             }
         }
         else if(server->config.enableUsernamePasswordLogin) {
+            if(token->userName.length == 0 && token->password.length == 0) {
+                /* empty username and password */
+                response->responseHeader.serviceResult = UA_STATUSCODE_BADIDENTITYTOKENINVALID;
+                return;
+            }
+
             /* username login */
             if(!UA_String_equal(&token->policyId, &up)) {
                 response->responseHeader.serviceResult = UA_STATUSCODE_BADIDENTITYTOKENINVALID;

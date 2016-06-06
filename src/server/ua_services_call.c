@@ -25,9 +25,21 @@ getArgumentsVariableNode(UA_Server *server, const UA_MethodNode *ofMethod,
 }
 
 static UA_StatusCode
-satisfySignature(const UA_Variant *var, const UA_Argument *arg) {
-    if(!UA_NodeId_equal(&var->type->typeId, &arg->dataType) )
-        return UA_STATUSCODE_BADINVALIDARGUMENT;
+satisfySignature(UA_Server *server, const UA_Variant *var, const UA_Argument *arg) {
+    if(!UA_NodeId_equal(&var->type->typeId, &arg->dataType)){
+        if(!UA_NodeId_equal(&var->type->typeId, &UA_TYPES[UA_TYPES_INT32].typeId))
+            return UA_STATUSCODE_BADINVALIDARGUMENT;
+
+        //enumerations are encoded as int32 -> if provided var is integer, check if arg is an enumeration type
+        UA_NodeId ENUMERATION_NODEID_NS0 = UA_NODEID_NUMERIC(0,29);
+        UA_NodeId hasSubTypeNodeId = UA_NODEID_NUMERIC(0,UA_NS0ID_HASSUBTYPE);
+        UA_Boolean found = false;
+        UA_StatusCode retval = isNodeInTree(server->nodestore, &arg->dataType, &ENUMERATION_NODEID_NS0, &hasSubTypeNodeId, 1, &found);
+        if(retval != UA_STATUSCODE_GOOD)
+            return UA_STATUSCODE_BADINTERNALERROR;
+        if(!found)
+            return UA_STATUSCODE_BADINVALIDARGUMENT;
+    }
 
     // Note: The namespace compiler will compile nodes with their actual array dimensions
     // Todo: Check if this is standard conform for scalars
@@ -83,7 +95,7 @@ satisfySignature(const UA_Variant *var, const UA_Argument *arg) {
 }
 
 static UA_StatusCode
-argConformsToDefinition(const UA_VariableNode *argRequirements, size_t argsSize, const UA_Variant *args) {
+argConformsToDefinition(UA_Server *server, const UA_VariableNode *argRequirements, size_t argsSize, const UA_Variant *args) {
     if(argRequirements->value.variant.value.type != &UA_TYPES[UA_TYPES_ARGUMENT])
         return UA_STATUSCODE_BADINTERNALERROR;
     UA_Argument *argReqs = (UA_Argument*)argRequirements->value.variant.value.data;
@@ -99,94 +111,81 @@ argConformsToDefinition(const UA_VariableNode *argRequirements, size_t argsSize,
 
     UA_StatusCode retval = UA_STATUSCODE_GOOD;
     for(size_t i = 0; i < argReqsSize; i++)
-        retval |= satisfySignature(&args[i], &argReqs[i]);
+        retval |= satisfySignature(server, &args[i], &argReqs[i]);
     return retval;
 }
 
 void
 Service_Call_single(UA_Server *server, UA_Session *session, const UA_CallMethodRequest *request,
                     UA_CallMethodResult *result) {
+    /* Verify method/object relations. Object must have a hasComponent reference to the method node. */
+    UA_Boolean found = false;
+    UA_NodeId hasComponentNodeId = UA_NODEID_NUMERIC(0,UA_NS0ID_HASCOMPONENT);
+    result->statusCode = isNodeInTree(server->nodestore, &request->methodId, &request->objectId,
+                                      &hasComponentNodeId, 1, &found);
+    if(!found)
+        result->statusCode = UA_STATUSCODE_BADMETHODINVALID;
+    if(result->statusCode != UA_STATUSCODE_GOOD)
+        return;
+
+    /* Get/verify the method node */
     const UA_MethodNode *methodCalled =
         (const UA_MethodNode*)UA_NodeStore_get(server->nodestore, &request->methodId);
     if(!methodCalled) {
         result->statusCode = UA_STATUSCODE_BADMETHODINVALID;
         return;
     }
+    if(methodCalled->nodeClass != UA_NODECLASS_METHOD) {
+        result->statusCode = UA_STATUSCODE_BADNODECLASSINVALID;
+        return;
+    }
+    if(!methodCalled->executable || !methodCalled->userExecutable || !methodCalled->attachedMethod) {
+        result->statusCode = UA_STATUSCODE_BADNOTWRITABLE; // There is no NOTEXECUTABLE?
+        return;
+    }
 
+    /* Get/verify the object node */
     const UA_ObjectNode *withObject =
         (const UA_ObjectNode*)UA_NodeStore_get(server->nodestore, &request->objectId);
     if(!withObject) {
         result->statusCode = UA_STATUSCODE_BADNODEIDINVALID;
         return;
     }
-
-    if(methodCalled->nodeClass != UA_NODECLASS_METHOD) {
-        result->statusCode = UA_STATUSCODE_BADNODECLASSINVALID;
-        return;
-    }
-
     if(withObject->nodeClass != UA_NODECLASS_OBJECT && withObject->nodeClass != UA_NODECLASS_OBJECTTYPE) {
         result->statusCode = UA_STATUSCODE_BADNODECLASSINVALID;
         return;
     }
 
-    /* Verify method/object relations */
-    // Object must have a hasComponent reference (or any inherited referenceType from sayd reference)
-    // to be valid for a methodCall...
-    result->statusCode = UA_STATUSCODE_BADMETHODINVALID;
-    for(size_t i = 0; i < withObject->referencesSize; i++) {
-        if(withObject->references[i].referenceTypeId.identifier.numeric == UA_NS0ID_HASCOMPONENT) {
-            // FIXME: Not checking any subtypes of HasComponent at the moment
-            if(UA_NodeId_equal(&withObject->references[i].targetId.nodeId, &methodCalled->nodeId)) {
-                result->statusCode = UA_STATUSCODE_GOOD;
-                break;
-            }
-        }
-    }
-    if(result->statusCode != UA_STATUSCODE_GOOD)
-        return;
-
-    /* Verify method executable */
-    if(!methodCalled->executable || !methodCalled->userExecutable) {
-        result->statusCode = UA_STATUSCODE_BADNOTWRITABLE; // There is no NOTEXECUTABLE?
-        return;
-    }
-
     /* Verify Input Argument count, types and sizes */
-    const UA_VariableNode *inputArguments;
-    inputArguments = getArgumentsVariableNode(server, methodCalled, UA_STRING("InputArguments"));
-    if(inputArguments) {
-        result->statusCode = argConformsToDefinition(inputArguments, request->inputArgumentsSize,
-                                                     request->inputArguments);
-        if(result->statusCode != UA_STATUSCODE_GOOD)
-            return;
-    } else if(request->inputArgumentsSize > 0) {
+    const UA_VariableNode *inputArguments = getArgumentsVariableNode(server, methodCalled, UA_STRING("InputArguments"));
+    if(!inputArguments) {
         result->statusCode = UA_STATUSCODE_BADINVALIDARGUMENT;
         return;
     }
+    result->statusCode = argConformsToDefinition(server, inputArguments, request->inputArgumentsSize,
+                                                 request->inputArguments);
+    if(result->statusCode != UA_STATUSCODE_GOOD)
+        return;
 
-    const UA_VariableNode *outputArguments =
-        getArgumentsVariableNode(server, methodCalled, UA_STRING("OutputArguments"));
+    /* Allocate the output arguments */
+    const UA_VariableNode *outputArguments = getArgumentsVariableNode(server, methodCalled, UA_STRING("OutputArguments"));
     if(!outputArguments) {
-        // A MethodNode must have an OutputArguments variable (which may be empty)
         result->statusCode = UA_STATUSCODE_BADINTERNALERROR;
         return;
     }
-
-    /* Call method if available */
-    if(methodCalled->attachedMethod) {
-        result->outputArguments = UA_Array_new(outputArguments->value.variant.value.arrayLength,
-                                               &UA_TYPES[UA_TYPES_VARIANT]);
-        result->outputArgumentsSize = outputArguments->value.variant.value.arrayLength;
-        result->statusCode = methodCalled->attachedMethod(methodCalled->methodHandle, withObject->nodeId,
-                                                          request->inputArgumentsSize, request->inputArguments,
-                                                          result->outputArgumentsSize, result->outputArguments);
+    result->outputArguments = UA_Array_new(outputArguments->value.variant.value.arrayLength, &UA_TYPES[UA_TYPES_VARIANT]);
+    if(!result->outputArguments) {
+        result->statusCode = UA_STATUSCODE_BADOUTOFMEMORY;
+        return;
     }
-    else
-        result->statusCode = UA_STATUSCODE_BADNOTWRITABLE; // There is no NOTEXECUTABLE?
+    result->outputArgumentsSize = outputArguments->value.variant.value.arrayLength;
+
+    /* Call the method */
+    result->statusCode = methodCalled->attachedMethod(methodCalled->methodHandle, withObject->nodeId,
+                                                      request->inputArgumentsSize, request->inputArguments,
+                                                      result->outputArgumentsSize, result->outputArguments);
     /* TODO: Verify Output Argument count, types and sizes */
 }
-
 void Service_Call(UA_Server *server, UA_Session *session, const UA_CallRequest *request,
                   UA_CallResponse *response) {
     UA_LOG_DEBUG_SESSION(server->config.logger, session, "Processing CallRequest");
@@ -195,8 +194,7 @@ void Service_Call(UA_Server *server, UA_Session *session, const UA_CallRequest *
         return;
     }
 
-    response->results = UA_Array_new(request->methodsToCallSize,
-                                     &UA_TYPES[UA_TYPES_CALLMETHODRESULT]);
+    response->results = UA_Array_new(request->methodsToCallSize, &UA_TYPES[UA_TYPES_CALLMETHODRESULT]);
     if(!response->results) {
         response->responseHeader.serviceResult = UA_STATUSCODE_BADOUTOFMEMORY;
         return;

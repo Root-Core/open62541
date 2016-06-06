@@ -212,12 +212,6 @@ monitoredHandler(void *handle, const UA_NodeId nodeid, const UA_Boolean removed)
     return UA_STATUSCODE_GOOD;
 }
 
-instantiationHandle(UA_NodeId newNodeId, UA_NodeId templateId, void *handle) {
-    printf("Instantiated Node ns=%d; id=%d from ns=%d; id=%d\n", newNodeId.namespaceIndex,
-        newNodeId.identifier.numeric, templateId.namespaceIndex, templateId.identifier.numeric);
-    return UA_STATUSCODE_GOOD;
-}
-
 static UA_Boolean
 authCallback(const UA_String* username, const UA_String* password, struct sockaddr_in* endpoint) {
     /* If both params are NULL, the callback was issued to check an anonymous login */
@@ -228,6 +222,12 @@ authCallback(const UA_String* username, const UA_String* password, struct sockad
     
     /* Allow access to all users (as it is an example) */
     return true;
+
+static UA_StatusCode
+instantiationHandle(const UA_NodeId newNodeId, const UA_NodeId templateId, void *handle ) {
+  printf("Instantiated Node ns=%d; id=%d from ns=%d; id=%d\n", newNodeId.namespaceIndex,
+         newNodeId.identifier.numeric, templateId.namespaceIndex, templateId.identifier.numeric);
+  return UA_STATUSCODE_GOOD;
 }
 
 int main(int argc, char** argv) {
