@@ -222,6 +222,7 @@ authCallback(const UA_String* username, const UA_String* password, struct sockad
     
     /* Allow access to all users (as it is an example) */
     return true;
+}
 
 static UA_StatusCode
 instantiationHandle(const UA_NodeId newNodeId, const UA_NodeId templateId, void *handle ) {

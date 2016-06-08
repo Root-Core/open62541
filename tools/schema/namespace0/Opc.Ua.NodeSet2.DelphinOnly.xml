@@ -1,0 +1,1111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UANodeSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" Version="1.02" LastModified="2013-03-06T05:36:44.0862658Z" xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
+  <UADataType NodeId="i=120" BrowseName="NamingRuleType">
+    <DisplayName>NamingRuleType</DisplayName>
+    <Description>Describes a value that specifies the significance of the BrowseName for an instance declaration.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=12169</Reference>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=29</Reference>
+    </References>
+    <Definition Name="NamingRuleType">
+      <Field Name="Mandatory" Value="1">
+        <Description>The BrowseName must appear in all instances of the type.</Description>
+      </Field>
+      <Field Name="Optional" Value="2">
+        <Description>The BrowseName may appear in an instance of the type.</Description>
+      </Field>
+      <Field Name="Constraint" Value="3">
+        <Description>The modelling rule defines a constraint and the BrowseName is not used in an instance of the type.</Description>
+      </Field>
+    </Definition>
+  </UADataType>
+  <UAVariable NodeId="i=12169" BrowseName="EnumValues" ParentNodeId="i=120" DataType="i=7594" ValueRank="1">
+    <DisplayName>EnumValues</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=120</Reference>
+    </References>
+    <Value>
+      <ListOfExtensionObject xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">
+        <ExtensionObject>
+          <TypeId>
+            <Identifier>i=7616</Identifier>
+          </TypeId>
+          <Body>
+            <EnumValueType>
+              <Value>1</Value>
+              <DisplayName>
+                <Locale>
+                </Locale>
+                <Text>Mandatory</Text>
+              </DisplayName>
+              <Description>
+                <Locale>
+                </Locale>
+                <Text>The BrowseName must appear in all instances of the type.</Text>
+              </Description>
+            </EnumValueType>
+          </Body>
+        </ExtensionObject>
+        <ExtensionObject>
+          <TypeId>
+            <Identifier>i=7616</Identifier>
+          </TypeId>
+          <Body>
+            <EnumValueType>
+              <Value>2</Value>
+              <DisplayName>
+                <Locale>
+                </Locale>
+                <Text>Optional</Text>
+              </DisplayName>
+              <Description>
+                <Locale>
+                </Locale>
+                <Text>The BrowseName may appear in an instance of the type.</Text>
+              </Description>
+            </EnumValueType>
+          </Body>
+        </ExtensionObject>
+        <ExtensionObject>
+          <TypeId>
+            <Identifier>i=7616</Identifier>
+          </TypeId>
+          <Body>
+            <EnumValueType>
+              <Value>3</Value>
+              <DisplayName>
+                <Locale>
+                </Locale>
+                <Text>Constraint</Text>
+              </DisplayName>
+              <Description>
+                <Locale>
+                </Locale>
+                <Text>The modelling rule defines a constraint and the BrowseName is not used in an instance of the type.</Text>
+              </Description>
+            </EnumValueType>
+          </Body>
+        </ExtensionObject>
+      </ListOfExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAObjectType NodeId="i=77" BrowseName="ModellingRuleType">
+    <DisplayName>ModellingRuleType</DisplayName>
+    <Description>The type for an object that describes how an instance declaration is used when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=111</Reference>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=58</Reference>
+    </References>
+  </UAObjectType>
+  <UAVariable NodeId="i=111" BrowseName="NamingRule" ParentNodeId="i=77" DataType="i=120">
+    <DisplayName>NamingRule</DisplayName>
+    <Description>Specified the significances of the BrowseName when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=77</Reference>
+    </References>
+    <Value>
+      <Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">1</Int32>
+    </Value>
+  </UAVariable>
+  <UAObject NodeId="i=78" BrowseName="Mandatory" SymbolicName="ModellingRule_Mandatory">
+    <DisplayName>Mandatory</DisplayName>
+    <Description>Specifies that an instance with the attributes and references of the instance declaration must appear when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=112</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=77</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="i=112" BrowseName="NamingRule" ParentNodeId="i=78" DataType="i=120">
+    <DisplayName>NamingRule</DisplayName>
+    <Description>Specified the significances of the BrowseName when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=78</Reference>
+    </References>
+    <Value>
+      <Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">1</Int32>
+    </Value>
+  </UAVariable>
+  <UAObject NodeId="i=80" BrowseName="Optional" SymbolicName="ModellingRule_Optional">
+    <DisplayName>Optional</DisplayName>
+    <Description>Specifies that an instance with the attributes and references of the instance declaration may appear when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=113</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=77</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="i=113" BrowseName="NamingRule" ParentNodeId="i=80" DataType="i=120">
+    <DisplayName>NamingRule</DisplayName>
+    <Description>Specified the significances of the BrowseName when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=80</Reference>
+    </References>
+    <Value>
+      <Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">2</Int32>
+    </Value>
+  </UAVariable>
+  <UAObject NodeId="i=83" BrowseName="ExposesItsArray" SymbolicName="ModellingRule_ExposesItsArray">
+    <DisplayName>ExposesItsArray</DisplayName>
+    <Description>Specifies that an instance appears for each element of the containing array variable.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=114</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=77</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="i=114" BrowseName="NamingRule" ParentNodeId="i=83" DataType="i=120">
+    <DisplayName>NamingRule</DisplayName>
+    <Description>Specified the significances of the BrowseName when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=83</Reference>
+    </References>
+    <Value>
+      <Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">3</Int32>
+    </Value>
+  </UAVariable>
+  <UAObject NodeId="i=79" BrowseName="MandatoryShared" SymbolicName="ModellingRule_MandatoryShared">
+    <DisplayName>MandatoryShared</DisplayName>
+    <Description>Specifies that a reference to a shared instance must appear in when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=116</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=77</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="i=116" BrowseName="NamingRule" ParentNodeId="i=79" DataType="i=120">
+    <DisplayName>NamingRule</DisplayName>
+    <Description>Specified the significances of the BrowseName when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=79</Reference>
+    </References>
+    <Value>
+      <Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">1</Int32>
+    </Value>
+  </UAVariable>
+  <UAObject NodeId="i=11508" BrowseName="OptionalPlaceholder" SymbolicName="ModellingRule_OptionalPlaceholder">
+    <DisplayName>OptionalPlaceholder</DisplayName>
+    <Description>Specifies that zero or more instances with the attributes and references of the instance declaration may appear when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=11509</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=77</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="i=11509" BrowseName="NamingRule" ParentNodeId="i=11508" DataType="i=120">
+    <DisplayName>NamingRule</DisplayName>
+    <Description>Specified the significances of the BrowseName when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=11508</Reference>
+    </References>
+    <Value>
+      <Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">2</Int32>
+    </Value>
+  </UAVariable>
+  <UAObject NodeId="i=11510" BrowseName="MandatoryPlaceholder" SymbolicName="ModellingRule_MandatoryPlaceholder">
+    <DisplayName>MandatoryPlaceholder</DisplayName>
+    <Description>Specifies that one or more instances with the attributes and references of the instance declaration must appear when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=11511</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=77</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="i=11511" BrowseName="NamingRule" ParentNodeId="i=11510" DataType="i=120">
+    <DisplayName>NamingRule</DisplayName>
+    <Description>Specified the significances of the BrowseName when a type is instantiated.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=11510</Reference>
+    </References>
+    <Value>
+      <Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">1</Int32>
+    </Value>
+  </UAVariable>
+  
+  
+  
+  
+  <UAObjectType NodeId="i=76" BrowseName="DataTypeEncodingType">
+    <DisplayName>DataTypeEncodingType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=58</Reference>
+    </References>
+  </UAObjectType>
+  <UAVariableType NodeId="i=72" BrowseName="DataTypeDictionaryType" DataType="ByteString" ValueRank="-2">
+    <DisplayName>DataTypeDictionaryType</DisplayName>
+    <Description>The type for variable that represents the collection of data type decriptions.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=106</Reference>
+      <Reference ReferenceType="HasProperty">i=107</Reference>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=63</Reference>
+    </References>
+  </UAVariableType>
+  <UAVariable NodeId="i=106" BrowseName="DataTypeVersion" ParentNodeId="i=72" DataType="String">
+    <DisplayName>DataTypeVersion</DisplayName>
+    <Description>The version number for the data type dictionary.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=80</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=72</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="i=107" BrowseName="NamespaceUri" ParentNodeId="i=72" DataType="String">
+    <DisplayName>NamespaceUri</DisplayName>
+    <Description>A URI that uniquely identifies the dictionary.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=80</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=72</Reference>
+    </References>
+  </UAVariable>
+  <UAObjectType NodeId="i=75" BrowseName="DataTypeSystemType">
+    <DisplayName>DataTypeSystemType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=58</Reference>
+    </References>
+  </UAObjectType>
+  <UAObject NodeId="i=92" BrowseName="XML Schema" SymbolicName="XmlSchema_TypeSystem">
+    <DisplayName>XML Schema</DisplayName>
+    <Description>A type system which uses XML schema to describe the encoding of data types.</Description>
+    <References>
+      <Reference ReferenceType="Organizes" IsForward="false">i=90</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=75</Reference>
+    </References>
+  </UAObject>
+  
+  
+  
+  
+  <UAVariableType NodeId="i=69" BrowseName="DataTypeDescriptionType" DataType="String" ValueRank="-2">
+    <DisplayName>DataTypeDescriptionType</DisplayName>
+    <Description>The type for variable that represents the description of a data type encoding.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=104</Reference>
+      <Reference ReferenceType="HasProperty">i=105</Reference>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=63</Reference>
+    </References>
+  </UAVariableType>
+  
+  
+  
+  
+  <UAVariableType NodeId="i=2365" BrowseName="DataItemType" ValueRank="-2">
+    <DisplayName>DataItemType</DisplayName>
+    <Description>A variable that contains live automation data.</Description>
+    <References>
+      <Reference ReferenceType="HasProperty">i=2366</Reference>
+      <Reference ReferenceType="HasProperty">i=2367</Reference>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=63</Reference>
+    </References>
+  </UAVariableType>
+  <UAVariable NodeId="i=2366" BrowseName="Definition" ParentNodeId="i=2365" DataType="String">
+    <DisplayName>Definition</DisplayName>
+    <Description>A vendor-specific, human readable string that specifies how the value of this DataItem is calculated.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=80</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=2365</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="i=2367" BrowseName="ValuePrecision" ParentNodeId="i=2365" DataType="Double">
+    <DisplayName>ValuePrecision</DisplayName>
+    <Description>The maximum precision that the server can maintain for the item based on restrictions in the target environment.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=80</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=2365</Reference>
+    </References>
+  </UAVariable>
+  <UAVariableType NodeId="i=2368" BrowseName="AnalogItemType" DataType="Number" ValueRank="-2">
+    <DisplayName>AnalogItemType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasProperty">i=2370</Reference>
+      <Reference ReferenceType="HasProperty">i=2369</Reference>
+      <Reference ReferenceType="HasProperty">i=2371</Reference>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=2365</Reference>
+    </References>
+  </UAVariableType>
+  <UAVariable NodeId="i=2370" BrowseName="InstrumentRange" ParentNodeId="i=2368" DataType="i=884">
+    <DisplayName>InstrumentRange</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=80</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=2368</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="i=2369" BrowseName="EURange" ParentNodeId="i=2368" DataType="i=884">
+    <DisplayName>EURange</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=2368</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="i=2371" BrowseName="EngineeringUnits" ParentNodeId="i=2368" DataType="i=887">
+    <DisplayName>EngineeringUnits</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=80</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=2368</Reference>
+    </References>
+  </UAVariable>
+  <UAVariableType NodeId="i=2372" BrowseName="DiscreteItemType" IsAbstract="true" ValueRank="-2">
+    <DisplayName>DiscreteItemType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=2365</Reference>
+    </References>
+  </UAVariableType>
+  <UAVariableType NodeId="i=2373" BrowseName="TwoStateDiscreteType" DataType="Boolean" ValueRank="-2">
+    <DisplayName>TwoStateDiscreteType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasProperty">i=2374</Reference>
+      <Reference ReferenceType="HasProperty">i=2375</Reference>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=2372</Reference>
+    </References>
+  </UAVariableType>
+  <UAVariable NodeId="i=2374" BrowseName="FalseState" ParentNodeId="i=2373" DataType="LocalizedText">
+    <DisplayName>FalseState</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=2373</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="i=2375" BrowseName="TrueState" ParentNodeId="i=2373" DataType="LocalizedText">
+    <DisplayName>TrueState</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=2373</Reference>
+    </References>
+  </UAVariable>
+  
+  
+  
+  
+  <UADataType NodeId="i=7594" BrowseName="EnumValueType">
+    <DisplayName>EnumValueType</DisplayName>
+    <Description>A mapping between a value of an enumerated type and a name and description.</Description>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=22</Reference>
+    </References>
+    <Definition Name="EnumValueType">
+      <Field Name="Value" DataType="i=8">
+        <Description>The value of the enumeration.</Description>
+      </Field>
+      <Field Name="DisplayName" DataType="i=21">
+        <Description>Human readable name for the value.</Description>
+      </Field>
+      <Field Name="Description" DataType="i=21">
+        <Description>A description of the value.</Description>
+      </Field>
+    </Definition>
+  </UADataType>
+  <UADataType NodeId="i=884" BrowseName="Range">
+    <DisplayName>Range</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=22</Reference>
+    </References>
+    <Definition Name="Range">
+      <Field Name="Low" DataType="i=11" />
+      <Field Name="High" DataType="i=11" />
+    </Definition>
+  </UADataType>
+  <UADataType NodeId="i=887" BrowseName="EUInformation">
+    <DisplayName>EUInformation</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=22</Reference>
+    </References>
+    <Definition Name="EUInformation">
+      <Field Name="NamespaceUri" DataType="i=12" />
+      <Field Name="UnitId" DataType="i=6" />
+      <Field Name="DisplayName" DataType="i=21" />
+      <Field Name="Description" DataType="i=21" />
+    </Definition>
+  </UADataType>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <UAObject NodeId="i=7616" BrowseName="Default XML" SymbolicName="DefaultXml">
+    <DisplayName>Default XML</DisplayName>
+    <References>
+      <Reference ReferenceType="HasEncoding" IsForward="false">i=7594</Reference>
+      <Reference ReferenceType="HasDescription">i=8291</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="i=8252" BrowseName="Opc.Ua" SymbolicName="OpcUa_XmlSchema" DataType="ByteString">
+    <DisplayName>Opc.Ua</DisplayName>
+    <References>
+      <Reference ReferenceType="HasProperty">i=8254</Reference>
+      <Reference ReferenceType="HasComponent">i=8285</Reference>
+      <Reference ReferenceType="HasComponent">i=8291</Reference>
+      <Reference ReferenceType="HasComponent">i=8918</Reference>
+      <Reference ReferenceType="HasComponent">i=8300</Reference>
+      <Reference ReferenceType="HasComponent">i=8297</Reference>
+      <Reference ReferenceType="HasComponent">i=8303</Reference>
+      <Reference ReferenceType="HasComponent">i=8417</Reference>
+      <Reference ReferenceType="HasComponent">i=8333</Reference>
+      <Reference ReferenceType="HasComponent">i=8306</Reference>
+      <Reference ReferenceType="HasComponent">i=8309</Reference>
+      <Reference ReferenceType="HasComponent">i=8312</Reference>
+      <Reference ReferenceType="HasComponent">i=8315</Reference>
+      <Reference ReferenceType="HasComponent">i=8318</Reference>
+      <Reference ReferenceType="HasComponent">i=8363</Reference>
+      <Reference ReferenceType="HasComponent">i=8366</Reference>
+      <Reference ReferenceType="HasComponent">i=8369</Reference>
+      <Reference ReferenceType="HasComponent">i=8372</Reference>
+      <Reference ReferenceType="HasComponent">i=8321</Reference>
+      <Reference ReferenceType="HasComponent">i=8324</Reference>
+      <Reference ReferenceType="HasComponent">i=8330</Reference>
+      <Reference ReferenceType="HasComponent">i=8564</Reference>
+      <Reference ReferenceType="HasComponent">i=8567</Reference>
+      <Reference ReferenceType="HasComponent">i=8570</Reference>
+      <Reference ReferenceType="HasComponent">i=8573</Reference>
+      <Reference ReferenceType="HasComponent">i=8576</Reference>
+      <Reference ReferenceType="HasComponent">i=8579</Reference>
+      <Reference ReferenceType="HasComponent">i=8582</Reference>
+      <Reference ReferenceType="HasComponent">i=8639</Reference>
+      <Reference ReferenceType="HasComponent">i=8702</Reference>
+      <Reference ReferenceType="HasComponent">i=8708</Reference>
+      <Reference ReferenceType="HasComponent">i=8711</Reference>
+      <Reference ReferenceType="HasComponent">i=8807</Reference>
+      <Reference ReferenceType="HasComponent">i=8384</Reference>
+      <Reference ReferenceType="HasComponent">i=8387</Reference>
+      <Reference ReferenceType="HasComponent">i=8390</Reference>
+      <Reference ReferenceType="HasComponent">i=8327</Reference>
+      <Reference ReferenceType="HasComponent">i=8843</Reference>
+      <Reference ReferenceType="HasComponent">i=11951</Reference>
+      <Reference ReferenceType="HasComponent">i=11954</Reference>
+      <Reference ReferenceType="HasComponent">i=8846</Reference>
+      <Reference ReferenceType="HasComponent">i=8849</Reference>
+      <Reference ReferenceType="HasComponent">i=8852</Reference>
+      <Reference ReferenceType="HasComponent">i=8855</Reference>
+      <Reference ReferenceType="HasComponent">i=8858</Reference>
+      <Reference ReferenceType="HasComponent">i=8861</Reference>
+      <Reference ReferenceType="HasComponent">i=8294</Reference>
+      <Reference ReferenceType="HasComponent">i=8864</Reference>
+      <Reference ReferenceType="HasComponent">i=8867</Reference>
+      <Reference ReferenceType="HasComponent">i=8870</Reference>
+      <Reference ReferenceType="HasComponent">i=8873</Reference>
+      <Reference ReferenceType="HasComponent">i=8876</Reference>
+      <Reference ReferenceType="HasComponent">i=12175</Reference>
+      <Reference ReferenceType="HasComponent">i=12178</Reference>
+      <Reference ReferenceType="HasComponent">i=12083</Reference>
+      <Reference ReferenceType="HasComponent">i=12086</Reference>
+      <Reference ReferenceType="HasComponent">i=8882</Reference>
+      <Reference ReferenceType="HasComponent">i=8879</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=92</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=72</Reference>
+    </References>
+    <Value>
+      <ByteString xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"></ByteString>
+    </Value>
+  </UAVariable>  
+  <UAVariable NodeId="i=8254" BrowseName="NamespaceUri" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>NamespaceUri</DisplayName>
+    <Description>A URI that uniquely identifies the dictionary.</Description>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">http://opcfoundation.org/UA/2008/02/Types.xsd</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8285" BrowseName="Argument" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>Argument</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='Argument']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8291" BrowseName="EnumValueType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>EnumValueType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='EnumValueType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8918" BrowseName="TimeZoneDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>TimeZoneDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='TimeZoneDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8300" BrowseName="ApplicationDescription" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ApplicationDescription</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ApplicationDescription']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8297" BrowseName="UserTokenPolicy" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>UserTokenPolicy</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='UserTokenPolicy']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8303" BrowseName="EndpointDescription" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>EndpointDescription</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='EndpointDescription']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8417" BrowseName="RegisteredServer" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>RegisteredServer</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='RegisteredServer']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8333" BrowseName="SignedSoftwareCertificate" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>SignedSoftwareCertificate</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='SignedSoftwareCertificate']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8306" BrowseName="UserIdentityToken" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>UserIdentityToken</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='UserIdentityToken']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8309" BrowseName="AnonymousIdentityToken" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>AnonymousIdentityToken</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='AnonymousIdentityToken']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8312" BrowseName="UserNameIdentityToken" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>UserNameIdentityToken</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='UserNameIdentityToken']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8315" BrowseName="X509IdentityToken" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>X509IdentityToken</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='X509IdentityToken']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8318" BrowseName="IssuedIdentityToken" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>IssuedIdentityToken</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='IssuedIdentityToken']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8363" BrowseName="AddNodesItem" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>AddNodesItem</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='AddNodesItem']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8366" BrowseName="AddReferencesItem" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>AddReferencesItem</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='AddReferencesItem']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8369" BrowseName="DeleteNodesItem" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>DeleteNodesItem</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='DeleteNodesItem']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8372" BrowseName="DeleteReferencesItem" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>DeleteReferencesItem</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='DeleteReferencesItem']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8321" BrowseName="EndpointConfiguration" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>EndpointConfiguration</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='EndpointConfiguration']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8324" BrowseName="SupportedProfile" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>SupportedProfile</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='SupportedProfile']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8330" BrowseName="SoftwareCertificate" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>SoftwareCertificate</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='SoftwareCertificate']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8564" BrowseName="ContentFilterElement" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ContentFilterElement</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ContentFilterElement']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8567" BrowseName="ContentFilter" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ContentFilter</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ContentFilter']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8570" BrowseName="FilterOperand" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>FilterOperand</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='FilterOperand']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8573" BrowseName="ElementOperand" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ElementOperand</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ElementOperand']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8576" BrowseName="LiteralOperand" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>LiteralOperand</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='LiteralOperand']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8579" BrowseName="AttributeOperand" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>AttributeOperand</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='AttributeOperand']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8582" BrowseName="SimpleAttributeOperand" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>SimpleAttributeOperand</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='SimpleAttributeOperand']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8639" BrowseName="HistoryEvent" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>HistoryEvent</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='HistoryEvent']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8702" BrowseName="MonitoringFilter" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>MonitoringFilter</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='MonitoringFilter']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8708" BrowseName="EventFilter" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>EventFilter</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='EventFilter']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8711" BrowseName="AggregateConfiguration" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>AggregateConfiguration</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='AggregateConfiguration']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8807" BrowseName="HistoryEventFieldList" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>HistoryEventFieldList</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='HistoryEventFieldList']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8384" BrowseName="ScalarTestType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ScalarTestType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ScalarTestType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8387" BrowseName="ArrayTestType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ArrayTestType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ArrayTestType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8390" BrowseName="CompositeTestType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>CompositeTestType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='CompositeTestType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8327" BrowseName="BuildInfo" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>BuildInfo</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='BuildInfo']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8843" BrowseName="RedundantServerDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>RedundantServerDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='RedundantServerDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=11951" BrowseName="EndpointUrlListDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>EndpointUrlListDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='EndpointUrlListDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=11954" BrowseName="NetworkGroupDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>NetworkGroupDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='NetworkGroupDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8846" BrowseName="SamplingIntervalDiagnosticsDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>SamplingIntervalDiagnosticsDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='SamplingIntervalDiagnosticsDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8849" BrowseName="ServerDiagnosticsSummaryDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ServerDiagnosticsSummaryDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ServerDiagnosticsSummaryDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8852" BrowseName="ServerStatusDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ServerStatusDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ServerStatusDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8855" BrowseName="SessionDiagnosticsDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>SessionDiagnosticsDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='SessionDiagnosticsDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8858" BrowseName="SessionSecurityDiagnosticsDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>SessionSecurityDiagnosticsDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='SessionSecurityDiagnosticsDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8861" BrowseName="ServiceCounterDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ServiceCounterDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ServiceCounterDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8294" BrowseName="StatusResult" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>StatusResult</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='StatusResult']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8864" BrowseName="SubscriptionDiagnosticsDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>SubscriptionDiagnosticsDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='SubscriptionDiagnosticsDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8867" BrowseName="ModelChangeStructureDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ModelChangeStructureDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ModelChangeStructureDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8870" BrowseName="SemanticChangeStructureDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>SemanticChangeStructureDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='SemanticChangeStructureDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8873" BrowseName="Range" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>Range</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='Range']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8876" BrowseName="EUInformation" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>EUInformation</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='EUInformation']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=12175" BrowseName="ComplexNumberType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ComplexNumberType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ComplexNumberType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=12178" BrowseName="DoubleComplexNumberType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>DoubleComplexNumberType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='DoubleComplexNumberType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=12083" BrowseName="AxisInformation" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>AxisInformation</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='AxisInformation']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=12086" BrowseName="XVType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>XVType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='XVType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8882" BrowseName="ProgramDiagnosticDataType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>ProgramDiagnosticDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='ProgramDiagnosticDataType']</String>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="i=8879" BrowseName="Annotation" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>Annotation</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='Annotation']</String>
+    </Value>
+  </UAVariable>
+
+
+
+
+  
+  <UAVariable NodeId="i=8291" BrowseName="EnumValueType" ParentNodeId="i=8252" DataType="String">
+    <DisplayName>EnumValueType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=69</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">i=8252</Reference>
+    </References>
+    <Value>
+      <String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">//xs:element[@name='EnumValueType']</String>
+    </Value>
+  </UAVariable>
+</UANodeSet>
