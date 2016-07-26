@@ -5,9 +5,6 @@
 extern "C" {
 #endif
 
-#include "ua_util.h"
-#include "ua_types.h"
-#include "ua_types_generated.h"
 #include "ua_server.h"
 #include "ua_session.h"
 #include "ua_nodes.h"
@@ -189,6 +186,7 @@ void Service_RegisterNodes(UA_Server *server, UA_Session *session,
 void Service_UnregisterNodes(UA_Server *server, UA_Session *session,
                              const UA_UnregisterNodesRequest *request,
                              UA_UnregisterNodesResponse *response);
+
 /**
  * Query Service Set
  * -----------------
@@ -279,11 +277,16 @@ void Service_DeleteMonitoredItems(UA_Server *server, UA_Session *session,
 void Service_ModifyMonitoredItems(UA_Server *server, UA_Session *session,
                                   const UA_ModifyMonitoredItemsRequest *request,
                                   UA_ModifyMonitoredItemsResponse *response);
-/* Not Implemented: Service_SetMonitoringMode */
+
+/* Used to set the monitoring mode for one or more MonitoredItems of a Subscription. */
+void Service_SetMonitoringMode(UA_Server *server, UA_Session *session,
+                               const UA_SetMonitoringModeRequest *request,
+                               UA_SetMonitoringModeResponse *response);
+
 /* Not Implemented: Service_SetTriggering */
 
 #endif
-                                      
+
 /**
  * Subscription Service Set
  * ------------------------
@@ -304,8 +307,8 @@ void Service_ModifySubscription(UA_Server *server, UA_Session *session,
 
 /* Used to enable sending of Notifications on one or more Subscriptions. */
 void Service_SetPublishingMode(UA_Server *server, UA_Session *session,
-	                           const UA_SetPublishingModeRequest *request,
-	                           UA_SetPublishingModeResponse *response);
+                               const UA_SetPublishingModeRequest *request,
+                               UA_SetPublishingModeResponse *response);
 
 /* Used for two purposes. First, it is used to acknowledge the receipt of
  * NotificationMessages for one or more Subscriptions. Second, it is used to

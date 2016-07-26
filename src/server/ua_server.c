@@ -10,8 +10,16 @@
 #include "ua_namespaceinit_generated.h"
 #endif
 
+#ifdef UA_ENABLE_SUBSCRIPTIONS
+#include "ua_subscription.h"
+#endif
+
 #if defined(UA_ENABLE_MULTITHREADING) && !defined(NDEBUG)
 UA_THREAD_LOCAL bool rcu_locked = false;
+#endif
+
+#if defined(UA_ENABLE_METHODCALLS) && defined(UA_ENABLE_SUBSCRIPTIONS)
+UA_THREAD_LOCAL UA_Session* methodCallSession = NULL;
 #endif
 
 static const UA_NodeId nodeIdHasSubType = {
@@ -29,6 +37,9 @@ static const UA_NodeId nodeIdHasProperty = {
 static const UA_NodeId nodeIdOrganizes = {
     .namespaceIndex = 0, .identifierType = UA_NODEIDTYPE_NUMERIC,
     .identifier.numeric = UA_NS0ID_ORGANIZES};
+static const UA_NodeId nodeIdFolderType = {
+    .namespaceIndex = 0, .identifierType = UA_NODEIDTYPE_NUMERIC,
+    .identifier.numeric = UA_NS0ID_FOLDERTYPE};
 
 static const UA_ExpandedNodeId expandedNodeIdBaseDataVariabletype = {
     .nodeId = {.namespaceIndex = 0, .identifierType = UA_NODEIDTYPE_NUMERIC,
@@ -189,6 +200,18 @@ addNodeInternal(UA_Server *server, UA_Node *node, const UA_NodeId parentNodeId,
     return res;
 }
 
+static UA_AddNodesResult
+addNodeInternalWithType(UA_Server *server, UA_Node *node, const UA_NodeId parentNodeId,
+                        const UA_NodeId referenceTypeId, const UA_NodeId typeIdentifier) {
+    UA_AddNodesResult res;
+    UA_AddNodesResult_init(&res);
+    UA_RCU_LOCK();
+    Service_AddNodes_existing(server, &adminSession, node, &parentNodeId,
+                              &referenceTypeId, &typeIdentifier, NULL, &res);
+    UA_RCU_UNLOCK();
+    return res;
+}
+
 UA_StatusCode
 __UA_Server_addNode(UA_Server *server, const UA_NodeClass nodeClass,
                     const UA_NodeId requestedNewNodeId, const UA_NodeId parentNodeId,
@@ -249,9 +272,9 @@ void UA_Server_delete(UA_Server *server) {
 
 /* Recurring cleanup. Removing unused and timed-out channels and sessions */
 static void UA_Server_cleanup(UA_Server *server, void *_) {
-    UA_DateTime now = UA_DateTime_now();
-    UA_SessionManager_cleanupTimedOut(&server->sessionManager, now);
-    UA_SecureChannelManager_cleanupTimedOut(&server->secureChannelManager, now);
+    UA_DateTime nowMonotonic = UA_DateTime_nowMonotonic();
+    UA_SessionManager_cleanupTimedOut(&server->sessionManager, nowMonotonic);
+    UA_SecureChannelManager_cleanupTimedOut(&server->secureChannelManager, nowMonotonic);
 }
 
 static UA_StatusCode
@@ -411,19 +434,43 @@ createVariableTypeNode(UA_Server *server, char* name, UA_UInt32 variabletypeid,
 }
 
 static void
-addVariableTypeNode_organized(UA_Server *server, char* name, UA_UInt32 variabletypeid,
-                              UA_UInt32 parent, UA_Boolean abstract) {
-    UA_VariableTypeNode *variabletype = createVariableTypeNode(server, name, variabletypeid, parent, abstract);
-    addNodeInternal(server, (UA_Node*)variabletype, UA_NODEID_NUMERIC(0, parent), nodeIdOrganizes);
-}
-
-static void
 addVariableTypeNode_subtype(UA_Server *server, char* name, UA_UInt32 variabletypeid,
                             UA_UInt32 parent, UA_Boolean abstract) {
-    UA_VariableTypeNode *variabletype =
-        createVariableTypeNode(server, name, variabletypeid, parent, abstract);
+    UA_VariableTypeNode *variabletype = createVariableTypeNode(server, name, variabletypeid, parent, abstract);
     addNodeInternal(server, (UA_Node*)variabletype, UA_NODEID_NUMERIC(0, parent), nodeIdHasSubType);
 }
+
+#if defined(UA_ENABLE_METHODCALLS) && defined(UA_ENABLE_SUBSCRIPTIONS)
+static UA_StatusCode
+GetMonitoredItems(void *handle, const UA_NodeId objectId, size_t inputSize,
+                          const UA_Variant *input, size_t outputSize, UA_Variant *output) {
+    UA_UInt32 subscriptionId = *((UA_UInt32*)(input[0].data));
+    UA_Session* session = methodCallSession;
+    UA_Subscription* subscription = UA_Session_getSubscriptionByID(session, subscriptionId);
+    if(!subscription)
+        return UA_STATUSCODE_BADSUBSCRIPTIONIDINVALID;
+
+    UA_UInt32 sizeOfOutput = 0;
+    UA_MonitoredItem* monitoredItem;
+    LIST_FOREACH(monitoredItem, &subscription->MonitoredItems, listEntry) {
+        sizeOfOutput++;
+    }
+    if(sizeOfOutput==0)
+        return UA_STATUSCODE_GOOD;
+
+    UA_UInt32* clientHandles = UA_Array_new(sizeOfOutput, &UA_TYPES[UA_TYPES_UINT32]);
+    UA_UInt32* serverHandles = UA_Array_new(sizeOfOutput, &UA_TYPES[UA_TYPES_UINT32]);
+    UA_UInt32 i = 0;
+    LIST_FOREACH(monitoredItem, &subscription->MonitoredItems, listEntry) {
+        clientHandles[i] = monitoredItem->clientHandle;
+        serverHandles[i] = monitoredItem->itemId;
+        i++;
+    }
+    UA_Variant_setArray(&output[0], clientHandles, sizeOfOutput, &UA_TYPES[UA_TYPES_UINT32]);
+    UA_Variant_setArray(&output[1], serverHandles, sizeOfOutput, &UA_TYPES[UA_TYPES_UINT32]);
+    return UA_STATUSCODE_GOOD;
+}
+#endif
 
 UA_Server * UA_Server_new(const UA_ServerConfig config) {
     UA_Server *server = UA_calloc(1, sizeof(UA_Server));
@@ -449,6 +496,7 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     UA_String_copy(&server->config.applicationDescription.applicationUri, &server->namespaces[1]);
     server->namespacesSize = 2;
 
+    /* Create endpoints w/o endpointurl. It is added from the networklayers at startup */
     server->endpointDescriptions = UA_Array_new(server->config.networkLayersSize,
                                                 &UA_TYPES[UA_TYPES_ENDPOINTDESCRIPTION]);
     server->endpointDescriptionsSize = server->config.networkLayersSize;
@@ -647,7 +695,8 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     hasnotifier->nodeId.identifier.numeric = UA_NS0ID_HASNOTIFIER;
     hasnotifier->isAbstract = false;
     hasnotifier->symmetric  = false;
-    addNodeInternal(server, (UA_Node*)hasnotifier, UA_NODEID_NUMERIC(0, UA_NS0ID_HASEVENTSOURCE), nodeIdHasSubType);
+    addNodeInternal(server, (UA_Node*)hasnotifier, UA_NODEID_NUMERIC(0, UA_NS0ID_HASEVENTSOURCE),
+                    nodeIdHasSubType);
 
     UA_ReferenceTypeNode *hasorderedcomponent = UA_NodeStore_newReferenceTypeNode();
     copyNames((UA_Node*)hasorderedcomponent, "HasOrderedComponent");
@@ -655,7 +704,8 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     hasorderedcomponent->nodeId.identifier.numeric = UA_NS0ID_HASORDEREDCOMPONENT;
     hasorderedcomponent->isAbstract = false;
     hasorderedcomponent->symmetric  = false;
-    addNodeInternal(server, (UA_Node*)hasorderedcomponent, UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT), nodeIdHasSubType);
+    addNodeInternal(server, (UA_Node*)hasorderedcomponent, UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT),
+                    nodeIdHasSubType);
 
     UA_ReferenceTypeNode *hasmodelparent = UA_NodeStore_newReferenceTypeNode();
     copyNames((UA_Node*)hasmodelparent, "HasModelParent");
@@ -688,7 +738,7 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     hascause->isAbstract = false;
     hascause->symmetric  = false;
     addNodeInternal(server, (UA_Node*)hascause, nodeIdNonHierarchicalReferences, nodeIdHasSubType);
-    
+
     UA_ReferenceTypeNode *haseffect = UA_NodeStore_newReferenceTypeNode();
     copyNames((UA_Node*)haseffect, "HasEffect");
     haseffect->inverseName = UA_LOCALIZEDTEXT_ALLOC("en_US", "MayBeEffectedBy");
@@ -723,29 +773,34 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     UA_NodeStore_insert(server->nodestore, (UA_Node*)baseobjtype);
     UA_RCU_UNLOCK();
 
+    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_ROOTFOLDER), nodeIdHasTypeDefinition,
+                         UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
+
+    addObjectTypeNode(server, "FolderType", UA_NS0ID_FOLDERTYPE, UA_NS0ID_BASEOBJECTTYPE, UA_NS0ID_HASSUBTYPE);
+
     UA_ObjectNode *objects = UA_NodeStore_newObjectNode();
     copyNames((UA_Node*)objects, "Objects");
     objects->nodeId.identifier.numeric = UA_NS0ID_OBJECTSFOLDER;
-    addNodeInternal(server, (UA_Node*)objects, UA_NODEID_NUMERIC(0, UA_NS0ID_ROOTFOLDER),
-                    nodeIdOrganizes);
+    addNodeInternalWithType(server, (UA_Node*)objects, UA_NODEID_NUMERIC(0, UA_NS0ID_ROOTFOLDER),
+                            nodeIdOrganizes, nodeIdFolderType);
 
     UA_ObjectNode *types = UA_NodeStore_newObjectNode();
     copyNames((UA_Node*)types, "Types");
     types->nodeId.identifier.numeric = UA_NS0ID_TYPESFOLDER;
-    addNodeInternal(server, (UA_Node*)types, UA_NODEID_NUMERIC(0, UA_NS0ID_ROOTFOLDER),
-                    nodeIdOrganizes);
+    addNodeInternalWithType(server, (UA_Node*)types, UA_NODEID_NUMERIC(0, UA_NS0ID_ROOTFOLDER),
+                            nodeIdOrganizes, nodeIdFolderType);
 
     UA_ObjectNode *views = UA_NodeStore_newObjectNode();
     copyNames((UA_Node*)views, "Views");
     views->nodeId.identifier.numeric = UA_NS0ID_VIEWSFOLDER;
-    addNodeInternal(server, (UA_Node*)views, UA_NODEID_NUMERIC(0, UA_NS0ID_ROOTFOLDER),
-                    nodeIdOrganizes);
+    addNodeInternalWithType(server, (UA_Node*)views, UA_NODEID_NUMERIC(0, UA_NS0ID_ROOTFOLDER),
+                            nodeIdOrganizes, nodeIdFolderType);
 
     UA_ObjectNode *referencetypes = UA_NodeStore_newObjectNode();
     copyNames((UA_Node*)referencetypes, "ReferenceTypes");
     referencetypes->nodeId.identifier.numeric = UA_NS0ID_REFERENCETYPESFOLDER;
-    addNodeInternal(server, (UA_Node*)referencetypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER),
-                    nodeIdOrganizes);
+    addNodeInternalWithType(server, (UA_Node*)referencetypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER),
+                            nodeIdOrganizes, nodeIdFolderType);
 
     addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_REFERENCETYPESFOLDER), nodeIdOrganizes,
                          UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_REFERENCES), true);
@@ -757,26 +812,11 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     UA_ObjectNode *objecttypes = UA_NodeStore_newObjectNode();
     copyNames((UA_Node*)objecttypes, "ObjectTypes");
     objecttypes->nodeId.identifier.numeric = UA_NS0ID_OBJECTTYPESFOLDER;
-    addNodeInternal(server, (UA_Node*)objecttypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER),
-                    nodeIdOrganizes);
+    addNodeInternalWithType(server, (UA_Node*)objecttypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER),
+                            nodeIdOrganizes, nodeIdFolderType);
     /* Link in the bootstrapped baseobjecttype */
     addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTTYPESFOLDER), nodeIdOrganizes,
                          UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEOBJECTTYPE), true);
-
-    addObjectTypeNode(server, "FolderType", UA_NS0ID_FOLDERTYPE, UA_NS0ID_BASEOBJECTTYPE, UA_NS0ID_HASSUBTYPE);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTTYPESFOLDER), nodeIdHasTypeDefinition,
-                         UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_ROOTFOLDER), nodeIdHasTypeDefinition,
-                         UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER), nodeIdHasTypeDefinition,
-                         UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER), nodeIdHasTypeDefinition,
-                         UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_VIEWSFOLDER), nodeIdHasTypeDefinition,
-                         UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_REFERENCETYPESFOLDER),
-                         nodeIdHasTypeDefinition, UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
-
     addObjectTypeNode(server, "ServerType", UA_NS0ID_SERVERTYPE, UA_NS0ID_BASEOBJECTTYPE, UA_NS0ID_HASSUBTYPE);
     addObjectTypeNode(server, "ServerDiagnosticsType", UA_NS0ID_SERVERDIAGNOSTICSTYPE,
                       UA_NS0ID_BASEOBJECTTYPE, UA_NS0ID_HASSUBTYPE);
@@ -794,9 +834,8 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     UA_ObjectNode *datatypes = UA_NodeStore_newObjectNode();
     copyNames((UA_Node*)datatypes, "DataTypes");
     datatypes->nodeId.identifier.numeric = UA_NS0ID_DATATYPESFOLDER;
-    addNodeInternal(server, (UA_Node*)datatypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER), nodeIdOrganizes);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_DATATYPESFOLDER), nodeIdHasTypeDefinition,
-                         UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
+    addNodeInternalWithType(server, (UA_Node*)datatypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER),
+                            nodeIdOrganizes, nodeIdFolderType);
 
     addDataTypeNode(server, "BaseDataType", UA_NS0ID_BASEDATATYPE, UA_NS0ID_DATATYPESFOLDER);
     addDataTypeNode(server, "Boolean", UA_NS0ID_BOOLEAN, UA_NS0ID_BASEDATATYPE);
@@ -831,15 +870,26 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     addDataTypeNode(server, "Enumeration", UA_NS0ID_ENUMERATION, UA_NS0ID_BASEDATATYPE);
         addDataTypeNode(server, "ServerState", UA_NS0ID_SERVERSTATE, UA_NS0ID_ENUMERATION);
 
+    /******************/
+    /* Variable Types */
+    /******************/
+
     UA_ObjectNode *variabletypes = UA_NodeStore_newObjectNode();
     copyNames((UA_Node*)variabletypes, "VariableTypes");
     variabletypes->nodeId.identifier.numeric = UA_NS0ID_VARIABLETYPESFOLDER;
-    addNodeInternal(server, (UA_Node*)variabletypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER),
-                    nodeIdOrganizes);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_VARIABLETYPESFOLDER),
-                         nodeIdHasTypeDefinition, UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
-    addVariableTypeNode_organized(server, "BaseVariableType", UA_NS0ID_BASEVARIABLETYPE,
-                                  UA_NS0ID_VARIABLETYPESFOLDER, true);
+    addNodeInternalWithType(server, (UA_Node*)variabletypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER),
+                            nodeIdOrganizes, nodeIdFolderType);
+
+    /* Bootstrap the BaseVariableType */
+    UA_VariableTypeNode *basevariabletype = UA_NodeStore_newVariableTypeNode();
+    copyNames((UA_Node*)basevariabletype, "BaseVariableType");
+    basevariabletype->nodeId.identifier.numeric = UA_NS0ID_BASEVARIABLETYPE;
+    UA_RCU_LOCK();
+    UA_NodeStore_insert(server->nodestore, (UA_Node*)basevariabletype);
+    UA_RCU_UNLOCK();
+    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_VARIABLETYPESFOLDER), nodeIdOrganizes,
+                         UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_BASEVARIABLETYPE), true);
+
     addVariableTypeNode_subtype(server, "BaseDataVariableType", UA_NS0ID_BASEDATAVARIABLETYPE,
                                 UA_NS0ID_BASEVARIABLETYPE, false);
     addVariableTypeNode_subtype(server, "PropertyType", UA_NS0ID_PROPERTYTYPE,
@@ -852,9 +902,8 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     UA_ObjectNode *eventtypes = UA_NodeStore_newObjectNode();
     copyNames((UA_Node*)eventtypes, "EventTypes");
     eventtypes->nodeId.identifier.numeric = UA_NS0ID_EVENTTYPESFOLDER;
-    addNodeInternal(server, (UA_Node*)eventtypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER), nodeIdOrganizes);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_EVENTTYPESFOLDER), nodeIdHasTypeDefinition,
-            UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_FOLDERTYPE), true);
+    addNodeInternalWithType(server, (UA_Node*)eventtypes, UA_NODEID_NUMERIC(0, UA_NS0ID_TYPESFOLDER),
+                            nodeIdOrganizes, nodeIdFolderType);
 #endif
 
 #ifdef UA_ENABLE_GENERATE_NAMESPACE0
@@ -869,10 +918,8 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     UA_ObjectNode *servernode = UA_NodeStore_newObjectNode();
     copyNames((UA_Node*)servernode, "Server");
     servernode->nodeId.identifier.numeric = UA_NS0ID_SERVER;
-    addNodeInternal(server, (UA_Node*)servernode, UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
-                    nodeIdOrganizes);
-    addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER), nodeIdHasTypeDefinition,
-                         UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_SERVERTYPE), true);
+    addNodeInternalWithType(server, (UA_Node*)servernode, UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+                            nodeIdOrganizes, UA_NODEID_NUMERIC(0, UA_NS0ID_SERVERTYPE));
 
     UA_VariableNode *namespaceArray = UA_NodeStore_newVariableNode();
     copyNames((UA_Node*)namespaceArray, "NamespaceArray");
@@ -1233,6 +1280,41 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
             nodeIdHasComponent);
     addReferenceInternal(server, UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER_SERVERREDUNDANCY_REDUNDANCYSUPPORT), nodeIdHasTypeDefinition,
                          UA_EXPANDEDNODEID_NUMERIC(0, UA_NS0ID_PROPERTYTYPE), true);
+
+#if defined(UA_ENABLE_METHODCALLS) && defined(UA_ENABLE_SUBSCRIPTIONS)
+    UA_Argument inputArguments;
+    UA_Argument_init(&inputArguments);
+    inputArguments.dataType = UA_TYPES[UA_TYPES_UINT32].typeId;
+    inputArguments.name = UA_STRING("SubscriptionId");
+    inputArguments.valueRank = -1; /* scalar argument */
+
+    UA_Argument outputArguments[2];
+    UA_Argument_init(&outputArguments[0]);
+    outputArguments[0].dataType = UA_TYPES[UA_TYPES_UINT32].typeId;
+    outputArguments[0].name = UA_STRING("ServerHandles");
+    outputArguments[0].valueRank = 1;
+
+    UA_Argument_init(&outputArguments[1]);
+    outputArguments[1].dataType = UA_TYPES[UA_TYPES_UINT32].typeId;
+    outputArguments[1].name = UA_STRING("ClientHandles");
+    outputArguments[1].valueRank = 1;
+
+    UA_MethodAttributes addmethodattributes;
+    UA_MethodAttributes_init(&addmethodattributes);
+    addmethodattributes.displayName = UA_LOCALIZEDTEXT("", "GetMonitoredItems");
+    addmethodattributes.executable = true;
+    addmethodattributes.userExecutable = true;
+
+    UA_Server_addMethodNode(server, UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER_GETMONITOREDITEMS),
+        UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER),
+        UA_NODEID_NUMERIC(0, UA_NS0ID_HASCOMPONENT),
+        UA_QUALIFIEDNAME(0, "GetMonitoredItems"), addmethodattributes,
+        GetMonitoredItems, /* callback of the method node */
+        NULL, /* handle passed with the callback */
+        1, &inputArguments,
+        2, outputArguments,
+        NULL);
+#endif
 
     return server;
 }
