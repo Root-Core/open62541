@@ -17,12 +17,18 @@ void Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
         response->responseHeader.serviceResult = UA_STATUSCODE_BADSECURECHANNELIDINVALID;
         return;
     }
+
+    /* Copy the server's endpoint into the response */
     response->responseHeader.serviceResult =
         UA_Array_copy(server->endpointDescriptions, server->endpointDescriptionsSize,
                       (void**)&response->serverEndpoints, &UA_TYPES[UA_TYPES_ENDPOINTDESCRIPTION]);
     if(response->responseHeader.serviceResult != UA_STATUSCODE_GOOD)
         return;
     response->serverEndpointsSize = server->endpointDescriptionsSize;
+
+    /* Mirror back the endpointUrl */
+    for(size_t i = 0; i < response->serverEndpointsSize; i++)
+        UA_String_copy(&request->endpointUrl, &response->serverEndpoints[i].endpointUrl);
 
     UA_Session *newSession;
     response->responseHeader.serviceResult =
@@ -45,14 +51,14 @@ void Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
         UA_SessionManager_removeSession(&server->sessionManager, &newSession->authenticationToken);
          return;
     }
-    UA_LOG_DEBUG_CHANNEL(server->config.logger, channel, "Session " PRINTF_GUID_FORMAT " created",
-                         PRINTF_GUID_DATA(newSession->sessionId));
+    UA_LOG_DEBUG_CHANNEL(server->config.logger, channel, "Session " UA_PRINTF_GUID_FORMAT " created",
+                         UA_PRINTF_GUID_DATA(newSession->sessionId));
 }
 
 void
 Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session *session,
                         const UA_ActivateSessionRequest *request, UA_ActivateSessionResponse *response) {
-    if(session->validTill < UA_DateTime_now()) {
+    if(session->validTill < UA_DateTime_nowMonotonic()) {
         UA_LOG_INFO_SESSION(server->config.logger, session, "ActivateSession: SecureChannel %i wants "
                             "to activate, but the session has timed out", channel->securityToken.channelId);
         response->responseHeader.serviceResult = UA_STATUSCODE_BADSESSIONIDINVALID;
@@ -63,8 +69,7 @@ Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session
        (request->userIdentityToken.content.decoded.type != &UA_TYPES[UA_TYPES_ANONYMOUSIDENTITYTOKEN] &&
         request->userIdentityToken.content.decoded.type != &UA_TYPES[UA_TYPES_USERNAMEIDENTITYTOKEN])) {
         UA_LOG_INFO_SESSION(server->config.logger, session, "ActivateSession: SecureChannel %i wants "
-                            "to activate, but the UserIdentify token is invalid",
-                            channel->securityToken.channelId);
+                            "to activate, but the UserIdentify token is invalid", channel->securityToken.channelId);
         response->responseHeader.serviceResult = UA_STATUSCODE_BADIDENTITYTOKENINVALID;
         return;
     }
