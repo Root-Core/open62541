@@ -156,3 +156,7 @@ MonitoredItemModifyRequest
 ModifyMonitoredItemsRequest
 MonitoredItemModifyResult
 ModifyMonitoredItemsResponse
+SetMonitoringModeRequest
+SetMonitoringModeResponse
+Range
+EUInformation
