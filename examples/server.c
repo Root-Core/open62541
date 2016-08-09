@@ -163,6 +163,7 @@ int main(int argc, char** argv) {
     UA_ServerConfig config = UA_ServerConfig_standard;
     config.networkLayers = &nl;
     config.networkLayersSize = 1;
+    config.authCallback = authCallback;
 
     /* load certificate */
     config.serverCertificate = loadCertificate();
@@ -187,7 +188,7 @@ int main(int argc, char** argv) {
 
     /* add a variable with the datetime data source */
     UA_DataSource dateDataSource = (UA_DataSource) {.handle = NULL, .read = readTimeData, .write = NULL,
-                                                    .authCallback = authCallback, .monitored = monitoredHandler};
+                                                    .monitored = monitoredHandler};
     UA_VariableAttributes v_attr;
     UA_VariableAttributes_init(&v_attr);
     v_attr.description = UA_LOCALIZEDTEXT("en_US","current time");

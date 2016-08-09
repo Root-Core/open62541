@@ -212,9 +212,8 @@ UA_Subscription_deleteMonitoredItem(UA_Server *server, UA_Subscription *sub,
     UA_MonitoredItem *mon;
     LIST_FOREACH(mon, &sub->MonitoredItems, listEntry) {
         if(mon->itemId == monitoredItemID) {
-			const UA_Node *target = UA_NodeStore_get(server->nodestore, &mon->monitoredNodeId);
-
 			// Triggering monitored callback on DataSource nodes
+			const UA_Node *target = UA_NodeStore_get(server->nodestore, &mon->monitoredNodeId);
 			if (target->nodeClass == UA_NODECLASS_VARIABLE)
 			{
 				const UA_VariableNode *varTarget = (const UA_VariableNode*)target;
