@@ -200,6 +200,7 @@ Service_CreateMonitoredItems_single(UA_Server *server, UA_Session *session, UA_S
     result->monitoredItemId = newMon->itemId;
 
 	// Triggering monitored callback on DataSource nodes
+	const UA_Node *target = UA_NodeStore_get(server->nodestore, &request->itemToMonitor.nodeId);
 	if (target->nodeClass == UA_NODECLASS_VARIABLE)
 	{
 		const UA_VariableNode *varTarget = (const UA_VariableNode*)target;
