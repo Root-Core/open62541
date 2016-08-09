@@ -1,8 +1,8 @@
 #include "ua_session.h"
+#include "ua_types_generated_handling.h"
 #include "ua_util.h"
 #ifdef UA_ENABLE_SUBSCRIPTIONS
 #include "server/ua_subscription.h"
-#include "server/ua_server_internal.h"
 #endif
 
 UA_Session adminSession = {
@@ -30,12 +30,13 @@ void UA_Session_init(UA_Session *session) {
     session->timeout = 0;
     UA_DateTime_init(&session->validTill);
     session->channel = NULL;
-#ifdef UA_ENABLE_SUBSCRIPTIONS
-    LIST_INIT(&session->serverSubscriptions);
-    session->lastSubscriptionID = UA_UInt32_random();
-#endif
     session->availableContinuationPoints = MAXCONTINUATIONPOINTS;
     LIST_INIT(&session->continuationPoints);
+#ifdef UA_ENABLE_SUBSCRIPTIONS
+    LIST_INIT(&session->serverSubscriptions);
+    session->lastSubscriptionID = 0;
+    SIMPLEQ_INIT(&session->responseQueue);
+#endif
 }
 
 void UA_Session_deleteMembersCleanup(UA_Session *session, UA_Server* server) {
@@ -59,11 +60,17 @@ void UA_Session_deleteMembersCleanup(UA_Session *session, UA_Server* server) {
         UA_Subscription_deleteMembers(currents, server);
         UA_free(currents);
     }
+    UA_PublishResponseEntry *entry;
+    while((entry = SIMPLEQ_FIRST(&session->responseQueue))) {
+        SIMPLEQ_REMOVE_HEAD(&session->responseQueue, listEntry);
+        UA_PublishResponse_deleteMembers(&entry->response);
+        UA_free(entry);
+    }
 #endif
 }
 
 void UA_Session_updateLifetime(UA_Session *session) {
-    session->validTill = UA_DateTime_now() + (UA_DateTime)(session->timeout * UA_MSEC_TO_DATETIME);
+    session->validTill = UA_DateTime_nowMonotonic() + (UA_DateTime)(session->timeout * UA_MSEC_TO_DATETIME);
 }
 
 #ifdef UA_ENABLE_SUBSCRIPTIONS
@@ -74,14 +81,14 @@ void UA_Session_addSubscription(UA_Session *session, UA_Subscription *newSubscri
 
 UA_StatusCode
 UA_Session_deleteSubscription(UA_Server *server, UA_Session *session, UA_UInt32 subscriptionID) {
-    UA_Subscription *sub = UA_Session_getSubscriptionByID(session, subscriptionID);    
+    UA_Subscription *sub = UA_Session_getSubscriptionByID(session, subscriptionID);
     if(!sub)
         return UA_STATUSCODE_BADSUBSCRIPTIONIDINVALID;
     LIST_REMOVE(sub, listEntry);
     UA_Subscription_deleteMembers(sub, server);
     UA_free(sub);
     return UA_STATUSCODE_GOOD;
-} 
+}
 
 UA_Subscription *
 UA_Session_getSubscriptionByID(UA_Session *session, UA_UInt32 subscriptionID) {
@@ -91,41 +98,6 @@ UA_Session_getSubscriptionByID(UA_Session *session, UA_UInt32 subscriptionID) {
             break;
     }
     return sub;
-}
-
-
-UA_StatusCode
-UA_Session_deleteMonitoredItem(UA_Session *session, UA_UInt32 subscriptionID,
-                               UA_UInt32 monitoredItemID) {
-    UA_Subscription *sub = UA_Session_getSubscriptionByID(session, subscriptionID);
-    if(!sub)
-        return UA_STATUSCODE_BADSUBSCRIPTIONIDINVALID;
-    
-    UA_MonitoredItem *mon, *tmp_mon;
-    LIST_FOREACH_SAFE(mon, &sub->MonitoredItems, listEntry, tmp_mon) {
-        if(mon->itemId == monitoredItemID) {
-            const UA_Node *target = UA_NodeStore_get(server->nodestore, &mon->monitoredNodeId);
-
-            // Triggering monitored callback on DataSource nodes
-            if (target->nodeClass == UA_NODECLASS_VARIABLE)
-            {
-                const UA_VariableNode *varTarget = (const UA_VariableNode*)target;
-
-                if (varTarget->valueSource == UA_VALUESOURCE_DATASOURCE)
-                {
-                    const UA_DataSource *dataSource = &varTarget->value.dataSource;
-
-                    dataSource->monitored(dataSource->handle, target->nodeId, true);
-                    // FIXME: use returned status code to generate (user) feedback etc...?
-                }
-            }
-            
-            LIST_REMOVE(mon, listEntry);
-            MonitoredItem_delete(mon);
-            return UA_STATUSCODE_GOOD;
-        }
-    }
-    return UA_STATUSCODE_BADMONITOREDITEMIDINVALID;
 }
 
 UA_UInt32 UA_Session_getUniqueSubscriptionID(UA_Session *session) {

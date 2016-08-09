@@ -16,9 +16,9 @@
 /** Mapping of namespace-id and url to an external nodestore. For namespaces
     that have no mapping defined, the internal nodestore is used by default. */
 typedef struct UA_ExternalNamespace {
-	UA_UInt16 index;
-	UA_String url;
-	UA_ExternalNodeStore externalNodeStore;
+    UA_UInt16 index;
+    UA_String url;
+    UA_ExternalNodeStore externalNodeStore;
 } UA_ExternalNamespace;
 #endif
 
@@ -31,6 +31,11 @@ typedef struct {
     char padding[64 - sizeof(void*) - sizeof(pthread_t) -
                  sizeof(UA_UInt32) - sizeof(UA_Boolean)]; // separate cache lines
 } UA_Worker;
+#endif
+
+#if defined(UA_ENABLE_METHODCALLS) && defined(UA_ENABLE_SUBSCRIPTIONS)
+/* Internally used context to a session 'context' of the current mehtod call */
+extern UA_THREAD_LOCAL UA_Session* methodCallSession;
 #endif
 
 struct UA_Server {
@@ -53,19 +58,19 @@ struct UA_Server {
     size_t externalNamespacesSize;
     UA_ExternalNamespace *externalNamespaces;
 #endif
-     
+
     /* Jobs with a repetition interval */
     LIST_HEAD(RepeatedJobsList, RepeatedJobs) repeatedJobs;
-    
+
 #ifdef UA_ENABLE_MULTITHREADING
     /* Dispatch queue head for the worker threads (the tail should not be in the same cache line) */
-	struct cds_wfcq_head dispatchQueue_head;
+    struct cds_wfcq_head dispatchQueue_head;
     UA_Worker *workers; /* there are nThread workers in a running server */
     struct cds_lfs_stack mainLoopJobs; /* Work that shall be executed only in the main loop and not
                                           by worker threads */
     struct DelayedJobs *delayedJobs;
     pthread_cond_t dispatchQueue_condition; /* so the workers don't spin if the queue is empty */
-	struct cds_wfcq_tail dispatchQueue_tail; /* Dispatch queue tail for the worker threads */
+    struct cds_wfcq_tail dispatchQueue_tail; /* Dispatch queue tail for the worker threads */
 #endif
 
     /* Config is the last element so that MSVC allows the usernamePasswordLogins
@@ -89,5 +94,13 @@ void UA_Server_deleteAllRepeatedJobs(UA_Server *server);
 #ifdef UA_BUILD_UNIT_TESTS
 UA_StatusCode parse_numericrange(const UA_String *str, UA_NumericRange *range);
 #endif
+
+UA_StatusCode
+getTypeHierarchy(UA_NodeStore *ns, const UA_NodeId *root, UA_NodeId **reftypes, size_t *reftypes_count);
+
+UA_StatusCode
+isNodeInTree(UA_NodeStore *ns, const UA_NodeId *rootNode, const UA_NodeId *nodeToFind,
+             const UA_NodeId *referenceTypeIds, size_t referenceTypeIdsSize,
+             size_t maxDepth, UA_Boolean *found);
 
 #endif /* UA_SERVER_INTERNAL_H_ */
