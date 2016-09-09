@@ -133,7 +133,8 @@ typedef struct {
      * @param username The username to check.
      * @param password The password to check.
      * @return Return true, if the provided credentials are valid, false if not. */
-    UA_Boolean (*authCallback)(const UA_String* username, const UA_String* password, struct sockaddr_in* endpoint);
+    UA_Boolean (*authCallback)(void* handle, const UA_String* username, const UA_String* password, struct sockaddr_in* endpoint);
+	void* authCallbackHandle;
 
     /* Limits for SecureChannels */
     UA_UInt16 maxSecureChannels;

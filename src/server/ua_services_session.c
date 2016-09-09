@@ -99,7 +99,7 @@ Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session
         /* if the callback is defined ... */
         else if (server->config.authCallback != NULL) {
             /* ... we have to check, whether it denies the anonymous access or not */
-            if (!server->config.authCallback(NULL, NULL, &addr)) {
+            if (!server->config.authCallback(server->config.authCallbackHandle, NULL, NULL, &addr)) {
                 /* access denied - abort, we can assume that anonymous login is not allowed */
                 response->responseHeader.serviceResult = UA_STATUSCODE_BADIDENTITYTOKENINVALID;
                 return;
@@ -114,7 +114,7 @@ Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session
         /* We either use the callback OR the username + password checks of the stack! */
         if (server->config.authCallback != NULL) {
             /* trying to use callback to auth user with password */
-            if (!server->config.authCallback(&token->userName, &token->password, &addr))
+            if (!server->config.authCallback(server->config.authCallbackHandle, &token->userName, &token->password, &addr))
             {
                 /* access denied - abort */
                 response->responseHeader.serviceResult = UA_STATUSCODE_BADUSERACCESSDENIED;
