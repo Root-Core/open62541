@@ -160,7 +160,7 @@ expand(UA_NodeStore *ns) {
 
     /* recompute the position of every entry and insert the pointer */
     for(size_t i = 0, j = 0; i < osize && j < count; i++) {
-        if(!oentries[i])
+        if(oentries[i] <= UA_NODESTORE_TOMBSTONE)
             continue;
         UA_NodeStoreEntry **e = findSlot(ns, &oentries[i]->node.nodeId);
         *e = oentries[i];
@@ -177,7 +177,7 @@ expand(UA_NodeStore *ns) {
 
 UA_NodeStore *
 UA_NodeStore_new(void) {
-    UA_NodeStore *ns = ns = UA_malloc(sizeof(UA_NodeStore));
+    UA_NodeStore *ns = UA_malloc(sizeof(UA_NodeStore));
     if(!ns)
         return NULL;
     ns->sizePrimeIndex = higher_prime_index(UA_NODESTORE_MINSIZE);
