@@ -41,6 +41,8 @@ extern "C" {
 #endif
 
 /**
+ * .. _server:
+ *
  * Server
  * ======
  *
@@ -402,13 +404,6 @@ UA_Server_readExecutable(UA_Server *server, const UA_NodeId nodeId,
  * - UserAccessLevel
  * - UserExecutable
  *
- * The following attributes are currently taken from the value variant and not
- * stored separately in the nodes:
- *
- * - DataType
- * - ValueRank
- * - ArrayDimensions
- *
  * Historizing is currently unsupported */
 /* Overwrite an attribute of a node. The specialized functions below provide a
  * more concise syntax.
@@ -487,6 +482,27 @@ UA_Server_writeValue(UA_Server *server, const UA_NodeId nodeId,
 }
 
 static UA_INLINE UA_StatusCode
+UA_Server_writeDataType(UA_Server *server, const UA_NodeId nodeId,
+                        const UA_NodeId dataType) {
+    return __UA_Server_write(server, &nodeId, UA_ATTRIBUTEID_DATATYPE,
+                             &UA_TYPES[UA_TYPES_NODEID], &dataType);
+}
+
+static UA_INLINE UA_StatusCode
+UA_Server_writeValueRank(UA_Server *server, const UA_NodeId nodeId,
+                         const UA_Int32 valueRank) {
+    return __UA_Server_write(server, &nodeId, UA_ATTRIBUTEID_VALUERANK,
+                             &UA_TYPES[UA_TYPES_INT32], &valueRank);
+}
+
+static UA_INLINE UA_StatusCode
+UA_Server_writeArrayDimensions(UA_Server *server, const UA_NodeId nodeId,
+                               const UA_Variant arrayDimensions) {
+    return __UA_Server_write(server, &nodeId, UA_ATTRIBUTEID_VALUE,
+                             &UA_TYPES[UA_TYPES_VARIANT], &arrayDimensions);
+}
+
+static UA_INLINE UA_StatusCode
 UA_Server_writeAccessLevel(UA_Server *server, const UA_NodeId nodeId,
                            const UA_UInt32 accessLevel) {
     return __UA_Server_write(server, &nodeId, UA_ATTRIBUTEID_ACCESSLEVEL,
@@ -558,6 +574,8 @@ UA_Server_call(UA_Server *server, const UA_CallMethodRequest *request);
  *   destructor is added to an object type
  * - Method callbacks, where a user-defined method is exposed in the information
  *   model
+ *
+ * .. _datasource:
  *
  * Data Source Callback
  * ~~~~~~~~~~~~~~~~~~~~
@@ -642,6 +660,8 @@ UA_Server_setVariableNode_valueCallback(UA_Server *server, const UA_NodeId nodeI
                                         const UA_ValueCallback callback);
 
 /**
+ * .. _object-lifecycle:
+ *
  * Object Lifecycle Management Callbacks
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Lifecycle management adds constructor and destructor callbacks to
@@ -686,7 +706,6 @@ UA_Server_setMethodNode_callback(UA_Server *server, const UA_NodeId methodNodeId
  * contain the nodeId of the new node. You may also pass NULL pointer if this
  * result is not relevant. The namespace index for nodes you create should never
  * be 0, as that index is reserved for OPC UA's self-description (namespace 0). */
-
 /* The instantiation callback is used to track the addition of new nodes. It is
  * also called for all sub-nodes contained in an object or variable type node
  * that is instantiated. */
@@ -731,12 +750,13 @@ UA_Server_addVariableTypeNode(UA_Server *server,
                               const UA_NodeId parentNodeId,
                               const UA_NodeId referenceTypeId,
                               const UA_QualifiedName browseName,
+                              const UA_NodeId typeDefinition,
                               const UA_VariableTypeAttributes attr,
                               UA_InstantiationCallback *instantiationCallback,
                               UA_NodeId *outNewNodeId) {
     return __UA_Server_addNode(server, UA_NODECLASS_VARIABLETYPE,
                                requestedNewNodeId, parentNodeId, referenceTypeId,
-                               browseName, UA_NODEID_NULL,
+                               browseName, typeDefinition,
                                (const UA_NodeAttributes*)&attr,
                                &UA_TYPES[UA_TYPES_VARIABLETYPEATTRIBUTES],
                                instantiationCallback, outNewNodeId);

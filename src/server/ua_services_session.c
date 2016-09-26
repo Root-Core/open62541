@@ -12,7 +12,8 @@
 #endif
 
 void Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
-                           const UA_CreateSessionRequest *request, UA_CreateSessionResponse *response) {
+                           const UA_CreateSessionRequest *request,
+                           UA_CreateSessionResponse *response) {
     if(channel->securityToken.channelId == 0) {
         response->responseHeader.serviceResult = UA_STATUSCODE_BADSECURECHANNELIDINVALID;
         return;
@@ -45,7 +46,8 @@ void Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
     response->authenticationToken = newSession->authenticationToken;
     response->responseHeader.serviceResult = UA_String_copy(&request->sessionName, &newSession->sessionName);
     if(server->endpointDescriptionsSize > 0)
-        response->responseHeader.serviceResult |= UA_ByteString_copy(&server->endpointDescriptions->serverCertificate,
+        response->responseHeader.serviceResult |=
+            UA_ByteString_copy(&server->endpointDescriptions->serverCertificate,
                                &response->serverCertificate);
     if(response->responseHeader.serviceResult != UA_STATUSCODE_GOOD) {
         UA_SessionManager_removeSession(&server->sessionManager, &newSession->authenticationToken);
@@ -56,8 +58,9 @@ void Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
 }
 
 void
-Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session *session,
-                        const UA_ActivateSessionRequest *request, UA_ActivateSessionResponse *response) {
+Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel,
+                        UA_Session *session, const UA_ActivateSessionRequest *request,
+                        UA_ActivateSessionResponse *response) {
     if(session->validTill < UA_DateTime_nowMonotonic()) {
         UA_LOG_INFO_SESSION(server->config.logger, session, "ActivateSession: SecureChannel %i wants "
                             "to activate, but the session has timed out", channel->securityToken.channelId);
@@ -150,7 +153,8 @@ Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel, UA_Session
                 }
             }
             if(!match) {
-                UA_LOG_INFO_SESSION(server->config.logger, session, "ActivateSession: Did not find matching username/password");
+                UA_LOG_INFO_SESSION(server->config.logger, session,
+                                    "ActivateSession: Did not find matching username/password");
                 response->responseHeader.serviceResult = UA_STATUSCODE_BADUSERACCESSDENIED;
                 return;
             }
