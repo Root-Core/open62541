@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--ToDo: Add 296, 11715, 11492-->
 <UANodeSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" Version="1.02" LastModified="2013-03-06T05:36:44.0862658Z" xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
   <Aliases>
     <Alias Alias="Boolean">i=1</Alias>
@@ -926,8 +927,8 @@
       <Reference ReferenceType="HasProperty">i=2254</Reference>
       <Reference ReferenceType="HasProperty">i=2255</Reference>
       <Reference ReferenceType="HasComponent">i=2256</Reference>
-      <Reference ReferenceType="HasProperty">i=2267</Reference>
-      <Reference ReferenceType="HasProperty">i=2994</Reference>
+      <!--ToDo:<Reference ReferenceType="HasProperty">i=2267</Reference>
+      <Reference ReferenceType="HasProperty">i=2994</Reference>-->
       <Reference ReferenceType="HasComponent">i=2268</Reference>
       <Reference ReferenceType="HasComponent">i=2274</Reference>
       <Reference ReferenceType="HasComponent">i=2295</Reference>
@@ -974,14 +975,14 @@
       <Reference ReferenceType="HasComponent" IsForward="false">i=2253</Reference>
     </References>
   </UAObject>
-  <UAVariable NodeId="i=2271" BrowseName="LocaleIdArray" ParentNodeId="i=2268" DataType="i=295" ValueRank="1">
+  <!--ToDo: <UAVariable NodeId="i=2271" BrowseName="LocaleIdArray" ParentNodeId="i=2268" DataType="i=295" ValueRank="1">
     <DisplayName>LocaleIdArray</DisplayName>
     <Description>A list of locales supported by the server.</Description>
     <References>
       <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
       <Reference ReferenceType="HasProperty" IsForward="false">i=2268</Reference>
     </References>
-  </UAVariable>
+  </UAVariable>-->
   <UAVariable NodeId="i=2735" BrowseName="MaxBrowseContinuationPoints" ParentNodeId="i=2268" DataType="UInt16">
     <DisplayName>MaxBrowseContinuationPoints</DisplayName>
     <Description>The maximum number of continuation points for Browse operations per session.</Description>
