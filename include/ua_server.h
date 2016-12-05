@@ -151,10 +151,11 @@ typedef struct {
     UA_UInt32Range lifeTimeCountLimits;
     UA_UInt32Range keepAliveCountLimits;
     UA_UInt32 maxNotificationsPerPublish;
+    UA_UInt32 maxRetransmissionQueueSize; /* 0 -> unlimited size */
 
     /* Limits for MonitoredItems */
     UA_DoubleRange samplingIntervalLimits;
-    UA_UInt32Range queueSizeLimits;
+    UA_UInt32Range queueSizeLimits; /* Negotiated with the client */
 } UA_ServerConfig;
 
 /* Add a new namespace to the server. Returns the index of the new namespace */
@@ -362,7 +363,7 @@ UA_Server_readArrayDimensions(UA_Server *server, const UA_NodeId nodeId,
 
 static UA_INLINE UA_StatusCode
 UA_Server_readAccessLevel(UA_Server *server, const UA_NodeId nodeId,
-                          UA_UInt32 *outAccessLevel) {
+                          UA_Byte *outAccessLevel) {
     return __UA_Server_read(server, &nodeId, UA_ATTRIBUTEID_ACCESSLEVEL,
                             outAccessLevel);
 }
@@ -504,9 +505,9 @@ UA_Server_writeArrayDimensions(UA_Server *server, const UA_NodeId nodeId,
 
 static UA_INLINE UA_StatusCode
 UA_Server_writeAccessLevel(UA_Server *server, const UA_NodeId nodeId,
-                           const UA_UInt32 accessLevel) {
+                           const UA_Byte accessLevel) {
     return __UA_Server_write(server, &nodeId, UA_ATTRIBUTEID_ACCESSLEVEL,
-                             &UA_TYPES[UA_TYPES_UINT32], &accessLevel);
+                             &UA_TYPES[UA_TYPES_BYTE], &accessLevel);
 }
 
 static UA_INLINE UA_StatusCode
