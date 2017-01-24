@@ -49,7 +49,7 @@ option(BUILD_SHARED_LIBS "Enable building of shared libraries (dll/so)" OFF)
 if(UA_ENABLE_COVERAGE)
   set(CMAKE_BUILD_TYPE DEBUG)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -lgcov")
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
 endif()
 
@@ -65,6 +65,9 @@ mark_as_advanced(UA_ENABLE_TYPENAMES)
 
 option(UA_ENABLE_EMBEDDED_LIBC "Use a custom implementation of some libc functions that might be missing on embedded targets (e.g. string handling)." OFF)
 mark_as_advanced(UA_ENABLE_EMBEDDED_LIBC)
+
+option(UA_ENABLE_DETERMINISTIC_RNG "Do not seed the random number generator (e.g. for unit tests)." OFF)
+mark_as_advanced(UA_ENABLE_DETERMINISTIC_RNG)
 
 option(UA_ENABLE_GENERATE_NAMESPACE0 "Generate and load UA XML Namespace 0 definition (experimental)" OFF)
 mark_as_advanced(UA_ENABLE_GENERATE_NAMESPACE0)
@@ -346,10 +349,8 @@ add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/open62541.h
 add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/open62541.c
                    PRE_BUILD
                    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/amalgamate.py
-                           ${OPEN62541_VER_COMMIT} ${CMAKE_CURRENT_BINARY_DIR}/open62541.c ${internal_headers}
-                           ${PROJECT_SOURCE_DIR}/src/server/ua_nodestore_hash.inc ${lib_sources}
-                   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/amalgamate.py ${internal_headers}
-                           ${PROJECT_SOURCE_DIR}/src/server/ua_nodestore_hash.inc ${lib_sources})
+                           ${OPEN62541_VER_COMMIT} ${CMAKE_CURRENT_BINARY_DIR}/open62541.c ${internal_headers} ${lib_sources}
+                   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/amalgamate.py ${internal_headers} ${lib_sources})
 
 # example information model from nodeset xml
 add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/nodeset.h ${PROJECT_BINARY_DIR}/src_generated/nodeset.c
@@ -423,6 +424,27 @@ if(UA_BUILD_EXAMPLES_NODESET_COMPILER)
                     DEPENDS ${PROJECT_BINARY_DIR}/src_generated/nodeset.h ${PROJECT_BINARY_DIR}/src_generated/nodeset.c)
 endif()
 
+############################
+# Linting run (clang-tidy) #
+############################
+
+find_package(ClangTools)
+add_custom_target(lint ${CLANG_TIDY_PROGRAM}
+                  ${lib_sources}
+                  -checks=cert-*,performance-*,readability-*,-readability-braces-around-statements
+                  -warnings-as-errors=cert-*,performance-*,readability-*,-readability-braces-around-statements
+                  --
+                  -std=c99
+                  -I${PROJECT_SOURCE_DIR}/include
+                  -I${PROJECT_SOURCE_DIR}/plugins
+                  -I${PROJECT_SOURCE_DIR}/deps
+                  -I${PROJECT_SOURCE_DIR}/src
+                  -I${PROJECT_SOURCE_DIR}/src/server
+                  -I${PROJECT_SOURCE_DIR}/src/client
+                  -I${PROJECT_BINARY_DIR}/src_generated
+                  DEPENDS ${lib_sources}
+                  COMMENT "Run clang-tidy on the library")
+add_dependencies(lint open62541)
 
 ##########################
 # Installation           #
@@ -434,27 +456,24 @@ endif()
 # export library (either static or shared depending on BUILD_SHARED_LIBS)
 install(TARGETS open62541
         LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-    )
+        ARCHIVE DESTINATION lib)
 # export amalgamated header open62541.h which is generated due to build of open62541-object
 install(FILES ${PROJECT_BINARY_DIR}/open62541.h DESTINATION include)
-
-
 
 ##########################
 # Packaging (DEB/RPM)    #
 ##########################
 # invoke via `make package`
 
-SET(CPACK_GENERATOR "TGZ;DEB;RPM")
-SET(CPACK_PACKAGE_VENDOR "open62541 team")
-SET(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OPC UA implementation")
-SET(CPACK_PACKAGE_DESCRIPTION "open62541 is a C-based library (linking with C++ projects is possible) with all necessary tools to implement dedicated OPC UA clients and servers, or to integrate OPC UA-based communication into existing applications.")
-SET(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
-SET(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-SET(CPACK_PACKAGE_VERSION_MAJOR "0")
-SET(CPACK_PACKAGE_VERSION_MINOR "2")
-SET(CPACK_PACKAGE_VERSION_PATCH "0")
-SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "open62541 team") #required
+set(CPACK_GENERATOR "TGZ;DEB;RPM")
+set(CPACK_PACKAGE_VENDOR "open62541 team")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OPC UA implementation")
+set(CPACK_PACKAGE_DESCRIPTION "open62541 is a C-based library (linking with C++ projects is possible) with all necessary tools to implement dedicated OPC UA clients and servers, or to integrate OPC UA-based communication into existing applications.")
+set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_VERSION_MAJOR "0")
+set(CPACK_PACKAGE_VERSION_MINOR "2")
+set(CPACK_PACKAGE_VERSION_PATCH "0")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "open62541 team") #required
 
-INCLUDE(CPack)
+include(CPack)

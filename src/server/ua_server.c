@@ -45,23 +45,31 @@ static const UA_NodeId nodeIdNonHierarchicalReferences = {
 /* Namespace Handling */
 /**********************/
 
-UA_UInt16 UA_Server_addNamespace(UA_Server *server, const char* name) {
-    /* Override const attribute to get string (dirty hack) */
-    const UA_String nameString = (UA_String){.length = strlen(name),
-                                             .data = (UA_Byte*)(uintptr_t)name};
-
+UA_UInt16 addNamespace(UA_Server *server, const UA_String name) {
     /* Check if the namespace already exists in the server's namespace array */
     for(UA_UInt16 i=0;i<server->namespacesSize;++i) {
-        if(UA_String_equal(&nameString, &server->namespaces[i]))
+        if(UA_String_equal(&name, &server->namespaces[i]))
             return i;
     }
 
     /* Add a new namespace to the namsepace array */
-    server->namespaces = UA_realloc(server->namespaces,
-                                    sizeof(UA_String) * (server->namespacesSize + 1));
-    UA_String_copy(&nameString, &server->namespaces[server->namespacesSize]);
+    UA_String *newNS = UA_realloc(server->namespaces,
+                                  sizeof(UA_String) * (server->namespacesSize + 1));
+    if(!newNS)
+        return 0;
+    server->namespaces = newNS;
+    UA_StatusCode retval = UA_String_copy(&name, &server->namespaces[server->namespacesSize]);
+    if(retval != UA_STATUSCODE_GOOD)
+        return 0;
     ++server->namespacesSize;
     return (UA_UInt16)(server->namespacesSize - 1);
+}
+
+UA_UInt16 UA_Server_addNamespace(UA_Server *server, const char* name) {
+    /* Override const attribute to get string (dirty hack) */
+    const UA_String nameString = {.length = strlen(name),
+                                  .data = (UA_Byte*)(uintptr_t)name};
+    return addNamespace(server, nameString);
 }
 
 #ifdef UA_ENABLE_EXTERNAL_NAMESPACES
@@ -92,12 +100,6 @@ UA_Server_addExternalNamespace(UA_Server *server, const UA_String *url,
     if(!nodeStore)
         return UA_STATUSCODE_BADARGUMENTSMISSING;
 
-    char urlString[256];
-    if(url.length >= 256)
-        return UA_STATUSCODE_BADINTERNALERROR;
-    memcpy(urlString, url.data, url.length);
-    urlString[url.length] = 0;
-
     size_t size = server->externalNamespacesSize;
     server->externalNamespaces =
         UA_realloc(server->externalNamespaces, sizeof(UA_ExternalNamespace) * (size + 1));
@@ -106,7 +108,6 @@ UA_Server_addExternalNamespace(UA_Server *server, const UA_String *url,
     *assignedNamespaceIndex = (UA_UInt16)server->namespacesSize;
     UA_String_copy(url, &server->externalNamespaces[size].url);
     ++server->externalNamespacesSize;
-    addNamespaceInternal(server, urlString);
 
     return UA_STATUSCODE_GOOD;
 }
@@ -115,19 +116,34 @@ UA_Server_addExternalNamespace(UA_Server *server, const UA_String *url,
 UA_StatusCode
 UA_Server_forEachChildNodeCall(UA_Server *server, UA_NodeId parentNodeId,
                                UA_NodeIteratorCallback callback, void *handle) {
-    UA_StatusCode retval = UA_STATUSCODE_GOOD;
     UA_RCU_LOCK();
     const UA_Node *parent = UA_NodeStore_get(server->nodestore, &parentNodeId);
     if(!parent) {
         UA_RCU_UNLOCK();
         return UA_STATUSCODE_BADNODEIDINVALID;
     }
-    for(size_t i = 0; i < parent->referencesSize; ++i) {
-        UA_ReferenceNode *ref = &parent->references[i];
+
+    /* TODO: We need to do an ugly copy of the references array since users may
+     * delete references from within the callback. In single-threaded mode this
+     * changes the same node we point at here. In multi-threaded mode, this
+     * creates a new copy as nodes are truly immutable. */
+    UA_ReferenceNode *refs = NULL;
+    size_t refssize = parent->referencesSize;
+    UA_StatusCode retval = UA_Array_copy(parent->references, parent->referencesSize,
+                                         (void**)&refs, &UA_TYPES[UA_TYPES_REFERENCENODE]);
+    if(retval != UA_STATUSCODE_GOOD) {
+        UA_RCU_UNLOCK();
+        return retval;
+    }
+
+    for(size_t i = parent->referencesSize; i > 0; --i) {
+        UA_ReferenceNode *ref = &refs[i-1];
         retval |= callback(ref->targetId.nodeId, ref->isInverse,
                            ref->referenceTypeId, handle);
     }
     UA_RCU_UNLOCK();
+
+    UA_Array_delete(refs, refssize, &UA_TYPES[UA_TYPES_REFERENCENODE]);
     return retval;
 }
 
@@ -345,6 +361,42 @@ readNamespaces(void *handle, const UA_NodeId nodeid, UA_Boolean sourceTimestamp,
 }
 
 static UA_StatusCode
+writeNamespaces(void *handle, const UA_NodeId nodeid, const UA_Variant *data,
+                const UA_NumericRange *range) {
+    UA_Server *server = (UA_Server*)handle;
+
+    /* Check the data type */
+    if(data->type != &UA_TYPES[UA_TYPES_STRING])
+        return UA_STATUSCODE_BADTYPEMISMATCH;
+
+    /* Check that the variant is not empty */
+    if(!data->data)
+        return UA_STATUSCODE_BADTYPEMISMATCH;
+
+    /* TODO: Writing with a range is not implemented */
+    if(range)
+        return UA_STATUSCODE_BADINTERNALERROR;
+
+    UA_String *newNamespaces = data->data;
+    size_t newNamespacesSize = data->arrayLength;
+
+    /* Test if we append to the existing namespaces */
+    if(newNamespacesSize <= server->namespacesSize)
+        return UA_STATUSCODE_BADTYPEMISMATCH;
+
+    /* Test if the existing namespaces are unchanged */
+    for(size_t i = 0; i < server->namespacesSize; ++i) {
+        if(!UA_String_equal(&server->namespaces[i], &newNamespaces[i]))
+            return UA_STATUSCODE_BADINTERNALERROR;
+    }
+
+    /* Add namespaces */
+    for(size_t i = server->namespacesSize; i < newNamespacesSize; ++i)
+        addNamespace(server, newNamespaces[i]);
+    return UA_STATUSCODE_GOOD;
+}
+
+static UA_StatusCode
 readCurrentTime(void *handle, const UA_NodeId nodeid, UA_Boolean sourceTimeStamp,
                 const UA_NumericRange *range, UA_DataValue *value) {
     if(range) {
@@ -451,8 +503,9 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     SLIST_INIT(&server->delayedCallbacks);
 #endif
 
-    /* uncomment for non-reproducible server runs */
-    //UA_random_seed(UA_DateTime_now());
+#ifndef UA_ENABLE_DETERMINISTIC_RNG
+    UA_random_seed((UA_UInt64)UA_DateTime_now());
+#endif
 
     /* ns0 and ns1 */
     server->namespaces = UA_Array_new(2, &UA_TYPES[UA_TYPES_STRING]);
@@ -924,6 +977,7 @@ UA_Server * UA_Server_new(const UA_ServerConfig config) {
     namespaceArray->valueSource = UA_VALUESOURCE_DATASOURCE;
     namespaceArray->value.dataSource = (UA_DataSource) {.handle = server, .read = readNamespaces,
                                                         .write = NULL, .monitored = NULL};
+    namespaceArray->dataType = UA_TYPES[UA_TYPES_STRING].typeId;
     namespaceArray->valueRank = 1;
     namespaceArray->minimumSamplingInterval = 1.0;
     addNodeInternalWithType(server, (UA_Node*)namespaceArray, UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER),

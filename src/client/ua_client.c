@@ -330,8 +330,8 @@ SecureChannelHandshake(UA_Client *client, UA_Boolean renew) {
     retval = response.responseHeader.serviceResult;
     if(retval == UA_STATUSCODE_GOOD) {
         /* Response.securityToken.revisedLifetime is UInt32 we need to cast it
-           to DateTime=Int64 we take 75% of lifetime to start renewing as
-           described in standard */
+         * to DateTime=Int64 we take 75% of lifetime to start renewing as
+         *  described in standard */
         client->scRenewAt = UA_DateTime_now() +
             (UA_DateTime)(response.securityToken.revisedLifetime * (UA_Double)UA_MSEC_TO_DATETIME * 0.75);
 
@@ -341,12 +341,13 @@ SecureChannelHandshake(UA_Client *client, UA_Boolean renew) {
         UA_ByteString_deleteMembers(&client->channel->serverNonce);
         UA_ByteString_copy(&response.serverNonce, &client->channel->serverNonce);
 
-        if(renew)
+        if(renew) {
             UA_LOG_DEBUG(client->config.logger, UA_LOGCATEGORY_SECURECHANNEL,
                          "SecureChannel renewed");
-        else
+        } else {
             UA_LOG_DEBUG(client->config.logger, UA_LOGCATEGORY_SECURECHANNEL,
                          "SecureChannel opened");
+        }
     } else {
         UA_LOG_DEBUG(client->config.logger, UA_LOGCATEGORY_SECURECHANNEL,
                      "SecureChannel could not be opened / "
@@ -448,8 +449,8 @@ static UA_StatusCode EndpointsHandshake(UA_Client *client) {
     for(size_t i = 0; i < endpointArraySize; ++i) {
         UA_EndpointDescription* endpoint = &endpointArray[i];
         /* look out for binary transport endpoints */
-        //NODE: Siemens returns empty ProfileUrl, we will accept it as binary
-        if(endpoint->transportProfileUri.length!=0 &&
+        /* Note: Siemens returns empty ProfileUrl, we will accept it as binary */
+        if(endpoint->transportProfileUri.length != 0 &&
            !UA_String_equal(&endpoint->transportProfileUri, &binaryTransport))
             continue;
         /* look out for an endpoint without security */
@@ -487,12 +488,11 @@ static UA_StatusCode EndpointsHandshake(UA_Client *client) {
     if(!endpointFound) {
         UA_LOG_ERROR(client->config.logger, UA_LOGCATEGORY_CLIENT,
                      "No suitable endpoint found");
-        return UA_STATUSCODE_BADINTERNALERROR;
-    }
-    if(!tokenFound) {
+        retval = UA_STATUSCODE_BADINTERNALERROR;
+    } else if(!tokenFound) {
         UA_LOG_ERROR(client->config.logger, UA_LOGCATEGORY_CLIENT,
-                     "No anonymous token found");
-        return UA_STATUSCODE_BADINTERNALERROR;
+                     "No suitable UserTokenPolicy found for the possible endpoints");
+        retval = UA_STATUSCODE_BADINTERNALERROR;
     }
     return retval;
 }
@@ -791,7 +791,7 @@ processServiceResponse(struct ResponseDescription *rd, UA_SecureChannel *channel
 }
 
 void
-__UA_Client_Service(UA_Client *client, const void *r, const UA_DataType *requestType,
+__UA_Client_Service(UA_Client *client, const void *request, const UA_DataType *requestType,
                     void *response, const UA_DataType *responseType) {
     UA_init(response, responseType);
     UA_ResponseHeader *respHeader = (UA_ResponseHeader*)response;
@@ -805,24 +805,24 @@ __UA_Client_Service(UA_Client *client, const void *r, const UA_DataType *request
     }
 
     /* Handling request parameters */
-    //here const *r is 'violated'
-    UA_RequestHeader *request = (UA_RequestHeader*)(uintptr_t)r;
-    UA_NodeId_copy(&client->authenticationToken, &request->authenticationToken);
-    request->timestamp = UA_DateTime_now();
-    request->requestHandle = ++client->requestHandle;
+    //here const *request is 'violated'
+    UA_RequestHeader *rr = (UA_RequestHeader*)(uintptr_t)request;
+    UA_NodeId_copy(&client->authenticationToken, &rr->authenticationToken);
+    rr->timestamp = UA_DateTime_now();
+    rr->requestHandle = ++client->requestHandle;
 
     /* Send the request */
     UA_UInt32 requestId = ++client->requestId;
     UA_LOG_DEBUG(client->config.logger, UA_LOGCATEGORY_CLIENT,
                  "Sending a request of type %i", requestType->typeId.identifier.numeric);
-    retval = UA_SecureChannel_sendBinaryMessage(client->channel, requestId, request, requestType);
+    retval = UA_SecureChannel_sendBinaryMessage(client->channel, requestId, rr, requestType);
     if(retval != UA_STATUSCODE_GOOD) {
         if(retval == UA_STATUSCODE_BADENCODINGLIMITSEXCEEDED)
             respHeader->serviceResult = UA_STATUSCODE_BADREQUESTTOOLARGE;
         else
             respHeader->serviceResult = retval;
         client->state = UA_CLIENTSTATE_ERRORED;
-        UA_NodeId_deleteMembers(&request->authenticationToken);
+        UA_NodeId_deleteMembers(&rr->authenticationToken);
         return;
     }
 
@@ -856,5 +856,5 @@ __UA_Client_Service(UA_Client *client, const void *r, const UA_DataType *request
         else
             UA_ByteString_deleteMembers(&reply);
     } while(!rd.processed);
-    UA_NodeId_deleteMembers(&request->authenticationToken);
+    UA_NodeId_deleteMembers(&rr->authenticationToken);
 }

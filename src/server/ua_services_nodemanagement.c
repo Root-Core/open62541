@@ -701,7 +701,7 @@ Service_AddNodes_single(UA_Server *server, UA_Session *session,
                         const UA_AddNodesItem *item, UA_AddNodesResult *result,
                         UA_InstantiationCallback *instantiationCallback) {
     /* Create the node from the attributes*/
-    UA_Node *node;
+    UA_Node *node = NULL;
     result->statusCode = createNodeFromAttributes(server, item, &node);
     if(result->statusCode != UA_STATUSCODE_GOOD)
         return;
@@ -843,7 +843,7 @@ UA_Server_addDataSourceVariableNode(UA_Server *server, const UA_NodeId requested
     item.typeDefinition.nodeId = typeDefinition;
     item.parentNodeId.nodeId = parentNodeId;
     retval |= copyStandardAttributes((UA_Node*)node, &item, (const UA_NodeAttributes*)&editAttr);
-    retval |= copyCommonVariableAttributes(server, node, &item, &editAttr);
+    retval |= copyVariableNodeAttributes(server, node, &item, &editAttr);
     UA_DataValue_deleteMembers(&node->value.data.value);
     node->valueSource = UA_VALUESOURCE_DATASOURCE;
     node->value.dataSource = dataSource;
@@ -1015,7 +1015,7 @@ Service_AddReferences_single(UA_Server *server, UA_Session *session,
             continue;
         } else {
             UA_ExternalNodeStore *ens = &server->externalNamespaces[j].externalNodeStore;
-            retval = ens->addOneWayReference(ens->ensHandle, item);
+            retval = (UA_StatusCode)ens->addOneWayReference(ens->ensHandle, item);
             handledExternally = UA_TRUE;
             break;
         }
@@ -1041,12 +1041,12 @@ Service_AddReferences_single(UA_Server *server, UA_Session *session,
                                 (UA_EditNodeCallback)addOneWayReference, &secondItem);
 #else
     handledExternally = UA_FALSE;
-    for(size_t j = 0; j <server->externalNamespacesSize; ++j) {
+    for(size_t j = 0; j < server->externalNamespacesSize; ++j) {
         if(secondItem.sourceNodeId.namespaceIndex != server->externalNamespaces[j].index) {
             continue;
         } else {
             UA_ExternalNodeStore *ens = &server->externalNamespaces[j].externalNodeStore;
-            retval = ens->addOneWayReference(ens->ensHandle, &secondItem);
+            retval = (UA_StatusCode)ens->addOneWayReference(ens->ensHandle, &secondItem);
             handledExternally = UA_TRUE;
             break;
         }
@@ -1147,6 +1147,19 @@ UA_Server_addReference(UA_Server *server, const UA_NodeId sourceId,
 /* Delete Nodes */
 /****************/
 
+static void
+removeReferences(UA_Server *server, UA_Session *session, const UA_Node *node) {
+    UA_DeleteReferencesItem item;
+    UA_DeleteReferencesItem_init(&item);
+    item.targetNodeId.nodeId = node->nodeId;
+    for(size_t i = 0; i < node->referencesSize; ++i) {
+        item.isForward = node->references[i].isInverse;
+        item.sourceNodeId = node->references[i].targetId.nodeId;
+        item.referenceTypeId = node->references[i].referenceTypeId;
+        Service_DeleteReferences_single(server, session, &item);
+    }
+}
+
 UA_StatusCode
 Service_DeleteNodes_single(UA_Server *server, UA_Session *session,
                            const UA_NodeId *nodeId, UA_Boolean deleteReferences) {
@@ -1154,50 +1167,20 @@ Service_DeleteNodes_single(UA_Server *server, UA_Session *session,
     if(!node)
         return UA_STATUSCODE_BADNODEIDUNKNOWN;
 
-    /* destroy an object before removing it */
+    /* TODO: check if the information model consistency is violated */
+
+    /* Destroy an object before removing it */
     if(node->nodeClass == UA_NODECLASS_OBJECT) {
-        /* find the object type(s) */
-        UA_BrowseDescription bd;
-        UA_BrowseDescription_init(&bd);
-        bd.browseDirection = UA_BROWSEDIRECTION_INVERSE;
-        bd.nodeId = *nodeId;
-        bd.referenceTypeId = UA_NODEID_NUMERIC(0, UA_NS0ID_HASSUBTYPE);
-        bd.includeSubtypes = true;
-        bd.nodeClassMask = UA_NODECLASS_OBJECTTYPE;
-
-        /* browse type definitions with admin rights */
-        UA_BrowseResult result;
-        UA_BrowseResult_init(&result);
-        Service_Browse_single(server, &adminSession, NULL, &bd, 0, &result);
-        for(size_t i = 0; i < result.referencesSize; ++i) {
-            /* call the destructor */
-            UA_ReferenceDescription *rd = &result.references[i];
-            const UA_ObjectTypeNode *typenode =
-                (const UA_ObjectTypeNode*)UA_NodeStore_get(server->nodestore, &rd->nodeId.nodeId);
-            if(!typenode)
-                continue;
-            if(typenode->nodeClass != UA_NODECLASS_OBJECTTYPE || !typenode->lifecycleManagement.destructor)
-                continue;
-
-            /* if there are several types with lifecycle management, call all the destructors */
+        /* Call the destructor from the object type */
+        const UA_ObjectTypeNode *typenode = getObjectNodeType(server, (const UA_ObjectNode*)node);
+        if(typenode && typenode->lifecycleManagement.destructor)
             typenode->lifecycleManagement.destructor(*nodeId, ((const UA_ObjectNode*)node)->instanceHandle);
-        }
-        UA_BrowseResult_deleteMembers(&result);
     }
 
-    /* remove references */
-    /* TODO: check if consistency is violated */
-    if(deleteReferences == true) { 
-        for(size_t i = 0; i < node->referencesSize; ++i) {
-            UA_DeleteReferencesItem item;
-            UA_DeleteReferencesItem_init(&item);
-            item.isForward = node->references[i].isInverse;
-            item.sourceNodeId = node->references[i].targetId.nodeId;
-            item.targetNodeId.nodeId = node->nodeId;
-            UA_Server_editNode(server, session, &node->references[i].targetId.nodeId,
-                               (UA_EditNodeCallback)deleteOneWayReference, &item);
-        }
-    }
+    /* Remove references to the node (not the references in the node that will
+     * be deleted anyway) */
+    if(deleteReferences)
+        removeReferences(server, session, node);
 
     return UA_NodeStore_remove(server->nodestore, nodeId);
 }
@@ -1245,18 +1228,17 @@ static UA_StatusCode
 deleteOneWayReference(UA_Server *server, UA_Session *session, UA_Node *node,
                       const UA_DeleteReferencesItem *item) {
     UA_Boolean edited = false;
-    for(size_t i = node->referencesSize-1; ; --i) {
-        if(i > node->referencesSize)
-            break; /* underflow after i == 0 */
-        if(!UA_NodeId_equal(&item->targetNodeId.nodeId, &node->references[i].targetId.nodeId))
+    for(size_t i = node->referencesSize; i > 0; --i) {
+        UA_ReferenceNode *ref = &node->references[i-1];
+        if(!UA_NodeId_equal(&item->targetNodeId.nodeId, &ref->targetId.nodeId))
             continue;
-        if(!UA_NodeId_equal(&item->referenceTypeId, &node->references[i].referenceTypeId))
+        if(!UA_NodeId_equal(&item->referenceTypeId, &ref->referenceTypeId))
             continue;
-        if(item->isForward == node->references[i].isInverse)
+        if(item->isForward == ref->isInverse)
             continue;
+        UA_ReferenceNode_deleteMembers(ref);
         /* move the last entry to override the current position */
-        UA_ReferenceNode_deleteMembers(&node->references[i]);
-        node->references[i] = node->references[node->referencesSize-1];
+        node->references[i-1] = node->references[node->referencesSize-1];
         --node->referencesSize;
         edited = true;
         break;
@@ -1285,6 +1267,7 @@ Service_DeleteReferences_single(UA_Server *server, UA_Session *session,
     secondItem.isForward = !item->isForward;
     secondItem.sourceNodeId = item->targetNodeId.nodeId;
     secondItem.targetNodeId.nodeId = item->sourceNodeId;
+    secondItem.referenceTypeId = item->referenceTypeId;
     return UA_Server_editNode(server, session, &secondItem.sourceNodeId,
                               (UA_EditNodeCallback)deleteOneWayReference, &secondItem);
 }
