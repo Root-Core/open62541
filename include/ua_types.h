@@ -1,15 +1,6 @@
-/* Copyright (C) 2013-2016 the contributors as stated in the AUTHORS file
- *
- * This file is part of open62541. open62541 is free software: you can
- * redistribute it and/or modify it under the terms of the GNU Lesser General
- * Public License, version 3 (as published by the Free Software Foundation) with
- * a static linking exception as stated in the LICENSE file provided with
- * open62541.
- *
- * open62541 is distributed in the hope that it will be useful, but WITHOUT ANY
- * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
- * A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
- * details. */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+*  License, v. 2.0. If a copy of the MPL was not distributed with this 
+*  file, You can obtain one at http://mozilla.org/MPL/2.0/.*/
 
 #ifndef UA_TYPES_H_
 #define UA_TYPES_H_
@@ -20,10 +11,10 @@ extern "C" {
 
 #include "ua_config.h"
 #include "ua_constants.h"
-#include <stdint.h>
-#include <stdbool.h>
 
 /**
+ * .. _types:
+ *
  * Data Types
  * ==========
  *
@@ -79,10 +70,10 @@ typedef int8_t UA_SByte;
 /**
  * Byte
  * ^^^^
- * An integer value between 0 and 256. */
+ * An integer value between 0 and 255. */
 typedef uint8_t UA_Byte;
 #define UA_BYTE_MIN 0
-#define UA_BYTE_MAX 256
+#define UA_BYTE_MAX 255
 
 /**
  * Int16
@@ -154,6 +145,27 @@ typedef double UA_Double;
  * or an operation. See the section :ref:`statuscodes` for the meaning of a
  * specific code. */
 typedef uint32_t UA_StatusCode;
+
+typedef struct {
+    UA_StatusCode code;      /* The numeric value of the StatusCode */
+    const char* name;        /* The symbolic name */
+    const char* explanation; /* Short message explaining the StatusCode */
+} UA_StatusCodeDescription;
+
+/* Returns the description of the StatusCode. Never returns NULL, but a generic
+ * description for invalid StatusCodes instead. */
+UA_EXPORT const UA_StatusCodeDescription *
+UA_StatusCode_description(UA_StatusCode code);
+
+static UA_INLINE const char *
+UA_StatusCode_name(UA_StatusCode code) {
+    return UA_StatusCode_description(code)->name;
+}
+
+static UA_INLINE const char *
+UA_StatusCode_explanation(UA_StatusCode code) {
+    return UA_StatusCode_description(code)->explanation;
+}
 
 /**
  * String
@@ -304,6 +316,9 @@ UA_EXPORT extern const UA_NodeId UA_NODEID_NULL;
 UA_Boolean UA_EXPORT UA_NodeId_isNull(const UA_NodeId *p);
 
 UA_Boolean UA_EXPORT UA_NodeId_equal(const UA_NodeId *n1, const UA_NodeId *n2);
+
+/* Returns a non-cryptographic hash for the NodeId */
+UA_UInt32 UA_EXPORT UA_NodeId_hash(const UA_NodeId *n);
 
 /** The following functions are shorthand for creating NodeIds. */
 static UA_INLINE UA_NodeId
@@ -488,29 +503,61 @@ typedef struct UA_NumericRange UA_NumericRange;
 
 #define UA_EMPTY_ARRAY_SENTINEL ((void*)0x01)
 
-typedef struct {
-    const UA_DataType *type;      /* The data type description */
-    enum {
+typedef enum {
         UA_VARIANT_DATA,          /* The data has the same lifecycle as the
                                      variant */
         UA_VARIANT_DATA_NODELETE, /* The data is "borrowed" by the variant and
                                      shall not be deleted at the end of the
                                      variant's lifecycle. */
-    } storageType;
+} UA_VariantStorageType;
+
+typedef struct {
+    const UA_DataType *type;      /* The data type description */
+    UA_VariantStorageType storageType;
     size_t arrayLength;           /* The number of elements in the data array */
     void *data;                   /* Points to the scalar or array data */
     size_t arrayDimensionsSize;   /* The number of dimensions */
     UA_UInt32 *arrayDimensions;   /* The length of each dimension */
 } UA_Variant;
 
+/* Returns true if the variant has no value defined (contains neither an array
+ * nor a scalar value).
+ *
+ * @param v The variant
+ * @return Is the variant empty */
+static UA_INLINE UA_Boolean
+UA_Variant_isEmpty(const UA_Variant *v) {
+    return v->type == NULL;
+}
+
 /* Returns true if the variant contains a scalar value. Note that empty variants
  * contain an array of length -1 (undefined).
  *
  * @param v The variant
- * @return Does the variant contain a scalar value. */
+ * @return Does the variant contain a scalar value */
 static UA_INLINE UA_Boolean
 UA_Variant_isScalar(const UA_Variant *v) {
     return (v->arrayLength == 0 && v->data > UA_EMPTY_ARRAY_SENTINEL);
+}
+
+/* Returns true if the variant contains a scalar value of the given type.
+ *
+ * @param v The variant
+ * @param type The data type
+ * @return Does the variant contain a scalar value of the given type */
+static UA_INLINE UA_Boolean
+UA_Variant_hasScalarType(const UA_Variant *v, const UA_DataType *type) {
+    return UA_Variant_isScalar(v) && type == v->type;
+}
+
+/* Returns true if the variant contains an array of the given type.
+ *
+ * @param v The variant
+ * @param type The data type
+ * @return Does the variant contain an array of the given type */
+static UA_INLINE UA_Boolean
+UA_Variant_hasArrayType(const UA_Variant *v, const UA_DataType *type) {
+    return (!UA_Variant_isScalar(v)) && type == v->type;
 }
 
 /* Set the variant to a scalar value that already resides in memory. The value
@@ -602,8 +649,7 @@ UA_Variant_setRangeCopy(UA_Variant *v, const void *array,
  * unknown to the receiver. See the section on :ref:`generic-types` on how types
  * are described. If the received data type is unkown, the encoded string and
  * target NodeId is stored instead of the decoded value. */
-typedef struct {
-    enum {
+typedef enum {
         UA_EXTENSIONOBJECT_ENCODED_NOBODY     = 0,
         UA_EXTENSIONOBJECT_ENCODED_BYTESTRING = 1,
         UA_EXTENSIONOBJECT_ENCODED_XML        = 2,
@@ -611,7 +657,10 @@ typedef struct {
         UA_EXTENSIONOBJECT_DECODED_NODELETE   = 4 /* Don't delete the content
                                                      together with the
                                                      ExtensionObject */
-    } encoding;
+} UA_ExtensionObjectEncoding;
+
+typedef struct {
+    UA_ExtensionObjectEncoding encoding;
     union {
         struct {
             UA_NodeId typeId;   /* The nodeid of the datatype */
@@ -713,6 +762,15 @@ struct UA_DataType {
     //UA_UInt16  xmlEncodingId;  /* NodeId of datatype when encoded as XML */
     UA_DataTypeMember *members;
 };
+
+/**
+ * Builtin data types can be accessed as UA_TYPES[UA_TYPES_XXX], where XXX is
+ * the name of the data type. If only the NodeId of a type is known, use the
+ * following method to retrieve the data type description. */
+/* Returns the data type description for the type's identifier or NULL if no
+ * matching data type was found. */
+const UA_DataType UA_EXPORT *
+UA_findDataType(const UA_NodeId *typeId);
 
 /** The following functions are used for generic handling of data types. */
 

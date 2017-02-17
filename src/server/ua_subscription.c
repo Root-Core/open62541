@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+*  License, v. 2.0. If a copy of the MPL was not distributed with this 
+*  file, You can obtain one at http://mozilla.org/MPL/2.0/.*/
+
 #include "ua_subscription.h"
 #include "ua_server_internal.h"
 #include "ua_types_encoding_binary.h"
@@ -5,6 +9,8 @@
 #include "ua_nodestore.h"
 
 #ifdef UA_ENABLE_SUBSCRIPTIONS /* conditional compilation */
+
+#define UA_VALUENCODING_MAXSTACK 512
 
 /*****************/
 /* MonitoredItem */
@@ -44,27 +50,88 @@ void MonitoredItem_delete(UA_Server *server, UA_MonitoredItem *monitoredItem) {
     UA_free(monitoredItem);
 }
 
+static void
+ensureSpaceInMonitoredItemQueue(UA_MonitoredItem *mon) {
+    if(mon->currentQueueSize < mon->maxQueueSize)
+        return;
+    MonitoredItem_queuedValue *queueItem;
+    if(mon->discardOldest)
+        queueItem = TAILQ_FIRST(&mon->queue);
+    else
+        queueItem = TAILQ_LAST(&mon->queue, QueueOfQueueDataValues);
+    UA_assert(queueItem); /* When the currentQueueSize > 0, then there is an item */
+    TAILQ_REMOVE(&mon->queue, queueItem, listEntry);
+    UA_DataValue_deleteMembers(&queueItem->value);
+    UA_free(queueItem);
+    --mon->currentQueueSize;
+}
+
+/* Has this sample changed from the last one? The method may allocate additional
+ * space for the encoding buffer. Detect the change in encoding->data. */
+static UA_StatusCode
+detectValueChange(UA_MonitoredItem *mon, UA_DataValue *value,
+                  UA_ByteString *encoding, UA_Boolean *changed) {
+    /* Apply Filter */
+    UA_Boolean hasValue = value->hasValue;
+    if(mon->trigger == UA_DATACHANGETRIGGER_STATUS)
+        value->hasValue = false;
+    UA_Boolean hasServerTimestamp = value->hasServerTimestamp;
+    UA_Boolean hasServerPicoseconds = value->hasServerPicoseconds;
+    value->hasServerTimestamp = false;
+    value->hasServerPicoseconds = false;
+    UA_Boolean hasSourceTimestamp = value->hasSourceTimestamp;
+    UA_Boolean hasSourcePicoseconds = value->hasSourcePicoseconds;
+    if(mon->trigger < UA_DATACHANGETRIGGER_STATUSVALUETIMESTAMP) {
+        value->hasSourceTimestamp = false;
+        value->hasSourcePicoseconds = false;
+    }
+
+    /* Encode the data for comparison */
+    UA_StatusCode retval = UA_STATUSCODE_GOOD;
+    size_t binsize = UA_calcSizeBinary(value, &UA_TYPES[UA_TYPES_DATAVALUE]);
+    if(binsize == 0) {
+        retval = UA_STATUSCODE_BADINTERNALERROR;
+        goto cleanup;
+    }
+
+    /* Allocate buffer on the heap if necessary */
+    if(binsize > UA_VALUENCODING_MAXSTACK &&
+       UA_ByteString_allocBuffer(encoding, binsize) != UA_STATUSCODE_GOOD) {
+        retval = UA_STATUSCODE_BADOUTOFMEMORY;
+        goto cleanup;
+    }
+
+    /* Encode the value */
+    size_t encodingOffset = 0;
+    retval = UA_encodeBinary(value, &UA_TYPES[UA_TYPES_DATAVALUE],
+                             NULL, NULL, encoding, &encodingOffset);
+    if(retval != UA_STATUSCODE_GOOD)
+        goto cleanup;
+
+    /* The value has changed */
+    encoding->length = encodingOffset;
+    if(!mon->lastSampledValue.data || !UA_String_equal(encoding, &mon->lastSampledValue))
+        *changed = true;
+
+ cleanup:
+    /* Reset the filter */
+    value->hasValue = hasValue;
+    value->hasServerTimestamp = hasServerTimestamp;
+    value->hasServerPicoseconds = hasServerPicoseconds;
+    value->hasSourceTimestamp = hasSourceTimestamp;
+    value->hasSourcePicoseconds = hasSourcePicoseconds;
+    return retval;
+}
+
 void UA_MoniteredItem_SampleCallback(UA_Server *server, UA_MonitoredItem *monitoredItem) {
     UA_Subscription *sub = monitoredItem->subscription;
     if(monitoredItem->monitoredItemType != UA_MONITOREDITEMTYPE_CHANGENOTIFY) {
         UA_LOG_DEBUG_SESSION(server->config.logger, sub->session,
                              "Subscription %u | MonitoredItem %i | "
-                             "Cannot process a monitoreditem that is not "
-                             "a data change notification",
+                             "Not a data change notification",
                              sub->subscriptionID, monitoredItem->itemId);
         return;
     }
-
-    MonitoredItem_queuedValue *newvalue = UA_malloc(sizeof(MonitoredItem_queuedValue));
-    if(!newvalue) {
-        UA_LOG_WARNING_SESSION(server->config.logger, sub->session,
-                               "Subscription %u | MonitoredItem %i | "
-                               "Skipped a sample due to lack of memory",
-                               sub->subscriptionID, monitoredItem->itemId);
-        return;
-    }
-    UA_DataValue_init(&newvalue->value);
-    newvalue->clientHandle = monitoredItem->clientHandle;
 
     /* Adjust timestampstoreturn to get source timestamp for triggering */
     UA_TimestampsToReturn ts = monitoredItem->timestampsToReturn;
@@ -79,106 +146,82 @@ void UA_MoniteredItem_SampleCallback(UA_Server *server, UA_MonitoredItem *monito
     rvid.nodeId = monitoredItem->monitoredNodeId;
     rvid.attributeId = monitoredItem->attributeID;
     rvid.indexRange = monitoredItem->indexRange;
-    Service_Read_single(server, sub->session, ts, &rvid, &newvalue->value);
+    UA_DataValue value;
+    UA_DataValue_init(&value);
+    Service_Read_single(server, sub->session, ts, &rvid, &value);
 
-    /* Apply Filter */
-    UA_Boolean hasValue = newvalue->value.hasValue;
-    UA_Boolean hasServerTimestamp = newvalue->value.hasServerTimestamp;
-    UA_Boolean hasServerPicoseconds = newvalue->value.hasServerPicoseconds;
-    UA_Boolean hasSourceTimestamp = newvalue->value.hasSourceTimestamp;
-    UA_Boolean hasSourcePicoseconds = newvalue->value.hasSourcePicoseconds;
-    newvalue->value.hasServerTimestamp = false;
-    newvalue->value.hasServerPicoseconds = false;
-    if(monitoredItem->trigger == UA_DATACHANGETRIGGER_STATUS)
-        newvalue->value.hasValue = false;
-    if(monitoredItem->trigger < UA_DATACHANGETRIGGER_STATUSVALUETIMESTAMP) {
-        newvalue->value.hasSourceTimestamp = false;
-        newvalue->value.hasSourcePicoseconds = false;
-    }
+    /* Stack-allocate some memory for the value encoding */
+    UA_Byte *stackValueEncoding = UA_alloca(UA_VALUENCODING_MAXSTACK);
+    UA_ByteString valueEncoding;
+    valueEncoding.data = stackValueEncoding;
+    valueEncoding.length = UA_VALUENCODING_MAXSTACK;
 
-    /* Encode the data for comparison */
-    size_t binsize = UA_calcSizeBinary(&newvalue->value, &UA_TYPES[UA_TYPES_DATAVALUE]);
-    UA_ByteString newValueAsByteString;
-    UA_StatusCode retval = UA_ByteString_allocBuffer(&newValueAsByteString, binsize);
-    if(retval != UA_STATUSCODE_GOOD) {
-        UA_DataValue_deleteMembers(&newvalue->value);
-        UA_free(newvalue);
-        return;
-    }
-    size_t encodingOffset = 0;
-    retval = UA_encodeBinary(&newvalue->value, &UA_TYPES[UA_TYPES_DATAVALUE],
-                             NULL, NULL, &newValueAsByteString, &encodingOffset);
+    /* Has the value changed? */
+    UA_Boolean changed = false;
+    UA_StatusCode retval = detectValueChange(monitoredItem, &value,
+                                             &valueEncoding, &changed);
+    if(!changed || retval != UA_STATUSCODE_GOOD)
+        goto cleanup;
 
-    /* Restore the settings changed for the filter */
-    newvalue->value.hasValue = hasValue;
-    newvalue->value.hasServerTimestamp = hasServerTimestamp;
-    newvalue->value.hasServerPicoseconds = hasServerPicoseconds;
-    if(monitoredItem->timestampsToReturn == UA_TIMESTAMPSTORETURN_SERVER ||
-       monitoredItem->timestampsToReturn == UA_TIMESTAMPSTORETURN_NEITHER) {
-        newvalue->value.hasSourceTimestamp = false;
-        newvalue->value.hasSourcePicoseconds = false;
-    } else {
-        newvalue->value.hasSourceTimestamp = hasSourceTimestamp;
-        newvalue->value.hasSourcePicoseconds = hasSourcePicoseconds;
-    }
-
-    /* Error or the value has not changed */
-    if(retval != UA_STATUSCODE_GOOD ||
-       (monitoredItem->lastSampledValue.data &&
-        UA_String_equal(&newValueAsByteString, &monitoredItem->lastSampledValue))) {
-        UA_LOG_TRACE_SESSION(server->config.logger, sub->session, "Subscription %u | "
-                             "MonitoredItem %u | Do not sample an unchanged value",
-                             sub->subscriptionID, monitoredItem->itemId);
+    /* Allocate the entry for the publish queue */
+    MonitoredItem_queuedValue *newQueueItem = UA_malloc(sizeof(MonitoredItem_queuedValue));
+    if(!newQueueItem) {
+        UA_LOG_WARNING_SESSION(server->config.logger, sub->session,
+                               "Subscription %u | MonitoredItem %i | "
+                               "Item for the publishing queue could not be allocated",
+                               sub->subscriptionID, monitoredItem->itemId);
         goto cleanup;
     }
 
-    UA_LOG_DEBUG_SESSION(server->config.logger, sub->session,
-                         "Subscription %u | MonitoredItem %u | "
-                         "Sampling the value", sub->subscriptionID, monitoredItem->itemId);
-
-    /* Is enough space in the queue? */
-    if(monitoredItem->currentQueueSize >= monitoredItem->maxQueueSize) {
-        MonitoredItem_queuedValue *queueItem;
-        if(monitoredItem->discardOldest)
-            queueItem = TAILQ_FIRST(&monitoredItem->queue);
-        else
-            queueItem = TAILQ_LAST(&monitoredItem->queue, QueueOfQueueDataValues);
-
-        if(!queueItem) {
-            UA_LOG_WARNING_SESSION(server->config.logger, sub->session, "Subscription %u | "
-                                   "MonitoredItem %u | Cannot remove an element from the full "
-                                   "queue. Internal error!", sub->subscriptionID,
-                                   monitoredItem->itemId);
+    /* Copy valueEncoding on the heap for the next comparison (if not already done) */
+    if(valueEncoding.data == stackValueEncoding) {
+        UA_ByteString cbs;
+        if(UA_ByteString_copy(&valueEncoding, &cbs) != UA_STATUSCODE_GOOD) {
+            UA_LOG_WARNING_SESSION(server->config.logger, sub->session,
+                                   "Subscription %u | MonitoredItem %i | "
+                                   "ByteString to compare values could not be created",
+                                   sub->subscriptionID, monitoredItem->itemId);
+            UA_free(newQueueItem);
             goto cleanup;
         }
-
-        TAILQ_REMOVE(&monitoredItem->queue, queueItem, listEntry);
-        UA_DataValue_deleteMembers(&queueItem->value);
-        UA_free(queueItem);
-        monitoredItem->currentQueueSize--;
+        valueEncoding = cbs;
     }
 
-    /* If the read request returned a datavalue pointing into the nodestore, we
-     * must make a deep copy to keep the datavalue across mainloop iterations */
-    if(newvalue->value.hasValue &&
-       newvalue->value.value.storageType == UA_VARIANT_DATA_NODELETE) {
-        UA_Variant tempv = newvalue->value.value;
-        UA_Variant_copy(&tempv, &newvalue->value.value);
+    /* Prepare the newQueueItem */
+    if(value.hasValue && value.value.storageType == UA_VARIANT_DATA_NODELETE) {
+        if(UA_DataValue_copy(&value, &newQueueItem->value) != UA_STATUSCODE_GOOD) {
+            UA_LOG_WARNING_SESSION(server->config.logger, sub->session,
+                                   "Subscription %u | MonitoredItem %i | "
+                                   "Item for the publishing queue could not be prepared",
+                                   sub->subscriptionID, monitoredItem->itemId);
+            UA_free(newQueueItem);
+            goto cleanup;
+        }
+    } else {
+        newQueueItem->value = value;
     }
+    newQueueItem->clientHandle = monitoredItem->clientHandle;
 
-    /* Replace the comparison bytestring with the current sample */
+    /* <-- Point of no return --> */
+
+    UA_LOG_DEBUG_SESSION(server->config.logger, sub->session,
+                         "Subscription %u | MonitoredItem %u | Sampled a new value",
+                         sub->subscriptionID, monitoredItem->itemId);
+
+    /* Replace the encoding for comparison */
     UA_ByteString_deleteMembers(&monitoredItem->lastSampledValue);
-    monitoredItem->lastSampledValue = newValueAsByteString;
+    monitoredItem->lastSampledValue = valueEncoding;
 
     /* Add the sample to the queue for publication */
-    TAILQ_INSERT_TAIL(&monitoredItem->queue, newvalue, listEntry);
-    monitoredItem->currentQueueSize++;
+    ensureSpaceInMonitoredItemQueue(monitoredItem);
+    TAILQ_INSERT_TAIL(&monitoredItem->queue, newQueueItem, listEntry);
+    ++monitoredItem->currentQueueSize;
     return;
 
  cleanup:
-    UA_ByteString_deleteMembers(&newValueAsByteString);
-    UA_DataValue_deleteMembers(&newvalue->value);
-    UA_free(newvalue);
+    if(valueEncoding.data != stackValueEncoding)
+        UA_ByteString_deleteMembers(&valueEncoding);
+    UA_DataValue_deleteMembers(&value);
 }
 
 UA_StatusCode
@@ -221,8 +264,9 @@ UA_Subscription * UA_Subscription_new(UA_Session *session, UA_UInt32 subscriptio
     new->currentLifetimeCount = 0;
     new->lastMonitoredItemId = 0;
     new->state = UA_SUBSCRIPTIONSTATE_NORMAL; /* The first publish response is sent immediately */
-    LIST_INIT(&new->retransmissionQueue);
-    LIST_INIT(&new->MonitoredItems);
+    LIST_INIT(&new->monitoredItems);
+    TAILQ_INIT(&new->retransmissionQueue);
+    new->retransmissionQueueSize = 0;
     return new;
 }
 
@@ -231,24 +275,25 @@ void UA_Subscription_deleteMembers(UA_Subscription *subscription, UA_Server *ser
 
     /* Delete monitored Items */
     UA_MonitoredItem *mon, *tmp_mon;
-    LIST_FOREACH_SAFE(mon, &subscription->MonitoredItems, listEntry, tmp_mon) {
+    LIST_FOREACH_SAFE(mon, &subscription->monitoredItems, listEntry, tmp_mon) {
         LIST_REMOVE(mon, listEntry);
         MonitoredItem_delete(server, mon);
     }
 
     /* Delete Retransmission Queue */
     UA_NotificationMessageEntry *nme, *nme_tmp;
-    LIST_FOREACH_SAFE(nme, &subscription->retransmissionQueue, listEntry, nme_tmp) {
-        LIST_REMOVE(nme, listEntry);
+    TAILQ_FOREACH_SAFE(nme, &subscription->retransmissionQueue, listEntry, nme_tmp) {
+        TAILQ_REMOVE(&subscription->retransmissionQueue, nme, listEntry);
         UA_NotificationMessage_deleteMembers(&nme->message);
         UA_free(nme);
     }
+    subscription->retransmissionQueueSize = 0;
 }
 
 UA_MonitoredItem *
 UA_Subscription_getMonitoredItem(UA_Subscription *sub, UA_UInt32 monitoredItemID) {
     UA_MonitoredItem *mon;
-    LIST_FOREACH(mon, &sub->MonitoredItems, listEntry) {
+    LIST_FOREACH(mon, &sub->monitoredItems, listEntry) {
         if(mon->itemId == monitoredItemID)
             break;
     }
@@ -259,7 +304,7 @@ UA_StatusCode
 UA_Subscription_deleteMonitoredItem(UA_Server *server, UA_Subscription *sub,
                                     UA_UInt32 monitoredItemID) {
     UA_MonitoredItem *mon;
-    LIST_FOREACH(mon, &sub->MonitoredItems, listEntry) {
+    LIST_FOREACH(mon, &sub->monitoredItems, listEntry) {
         if(mon->itemId == monitoredItemID) {
 			// Triggering monitored callback on DataSource nodes
 			const UA_Node *target = UA_NodeStore_get(server->nodestore, &mon->monitoredNodeId);
@@ -290,18 +335,52 @@ countQueuedNotifications(UA_Subscription *sub, UA_Boolean *moreNotifications) {
     size_t notifications = 0;
     if(sub->publishingEnabled) {
         UA_MonitoredItem *mon;
-        LIST_FOREACH(mon, &sub->MonitoredItems, listEntry) {
+        LIST_FOREACH(mon, &sub->monitoredItems, listEntry) {
             MonitoredItem_queuedValue *qv;
             TAILQ_FOREACH(qv, &mon->queue, listEntry) {
                 if(notifications >= sub->notificationsPerPublish) {
                     *moreNotifications = true;
                     break;
                 }
-                notifications++;
+                ++notifications;
             }
         }
     }
     return notifications;
+}
+
+static void
+UA_Subscription_addRetransmissionMessage(UA_Server *server, UA_Subscription *sub,
+                                         UA_NotificationMessageEntry *entry) {
+    /* Release the oldest entry if there is not enough space */
+    if(server->config.maxRetransmissionQueueSize > 0 &&
+       sub->retransmissionQueueSize >= server->config.maxRetransmissionQueueSize) {
+        UA_NotificationMessageEntry *lastentry =
+            TAILQ_LAST(&sub->retransmissionQueue, UA_ListOfNotificationMessages);
+        TAILQ_REMOVE(&sub->retransmissionQueue, lastentry, listEntry);
+        --sub->retransmissionQueueSize;
+        UA_NotificationMessage_deleteMembers(&lastentry->message);
+        UA_free(lastentry);
+    }
+
+    /* Add entry */
+    TAILQ_INSERT_HEAD(&sub->retransmissionQueue, entry, listEntry);
+    ++sub->retransmissionQueueSize;
+}
+
+UA_StatusCode
+UA_Subscription_removeRetransmissionMessage(UA_Subscription *sub, UA_UInt32 sequenceNumber) {
+    UA_NotificationMessageEntry *entry, *entry_tmp;
+    TAILQ_FOREACH_SAFE(entry, &sub->retransmissionQueue, listEntry, entry_tmp) {
+        if(entry->message.sequenceNumber != sequenceNumber)
+            continue;
+        TAILQ_REMOVE(&sub->retransmissionQueue, entry, listEntry);
+        --sub->retransmissionQueueSize;
+        UA_NotificationMessage_deleteMembers(&entry->message);
+        UA_free(entry);
+        return UA_STATUSCODE_GOOD;
+    }
+    return UA_STATUSCODE_BADSEQUENCENUMBERUNKNOWN;
 }
 
 static UA_StatusCode
@@ -333,7 +412,7 @@ prepareNotificationMessage(UA_Subscription *sub, UA_NotificationMessage *message
     /* Move notifications into the response .. the point of no return */
     size_t l = 0;
     UA_MonitoredItem *mon;
-    LIST_FOREACH(mon, &sub->MonitoredItems, listEntry) {
+    LIST_FOREACH(mon, &sub->monitoredItems, listEntry) {
         MonitoredItem_queuedValue *qv, *qv_tmp;
         TAILQ_FOREACH_SAFE(qv, &mon->queue, listEntry, qv_tmp) {
             if(l >= notifications)
@@ -343,8 +422,8 @@ prepareNotificationMessage(UA_Subscription *sub, UA_NotificationMessage *message
             min->value = qv->value;
             TAILQ_REMOVE(&mon->queue, qv, listEntry);
             UA_free(qv);
-            mon->currentQueueSize--;
-            l++;
+            --mon->currentQueueSize;
+            ++l;
         }
     }
     return UA_STATUSCODE_GOOD;
@@ -364,11 +443,11 @@ void UA_Subscription_publishCallback(UA_Server *server, UA_Subscription *sub) {
 
     /* Return if nothing to do */
     if(notifications == 0) {
-        sub->currentKeepAliveCount++;
+        ++sub->currentKeepAliveCount;
         if(sub->currentKeepAliveCount < sub->maxKeepAliveCount)
             return;
         UA_LOG_DEBUG_SESSION(server->config.logger, sub->session,
-                             "Sending a keepalive on subscription %u",
+                             "Subscription %u | Sending a KeepAlive",
                              sub->subscriptionID)
     }
 
@@ -383,12 +462,12 @@ void UA_Subscription_publishCallback(UA_Server *server, UA_Subscription *sub) {
     /* Cannot publish without a response */
     if(!pre) {
         UA_LOG_DEBUG_SESSION(server->config.logger, sub->session,
-                             "Cannot send a publish response on subscription %u, "
+                             "Subscription %u | Cannot send a publish response "
                              "since the publish queue is empty", sub->subscriptionID)
         if(sub->state != UA_SUBSCRIPTIONSTATE_LATE) {
             sub->state = UA_SUBSCRIPTIONSTATE_LATE;
         } else {
-            sub->currentLifetimeCount++;
+            ++sub->currentLifetimeCount;
             if(sub->currentLifetimeCount > sub->lifeTimeCount) {
                 UA_LOG_DEBUG_SESSION(server->config.logger, sub->session, "Subscription %u | "
                                      "End of lifetime for subscription", sub->subscriptionID);
@@ -443,23 +522,20 @@ void UA_Subscription_publishCallback(UA_Server *server, UA_Subscription *sub) {
          * be done here, so that the message itself is included in the available
          * sequence numbers for acknowledgement. */
         retransmission->message = response->notificationMessage;
-        LIST_INSERT_HEAD(&sub->retransmissionQueue, retransmission, listEntry);
+        UA_Subscription_addRetransmissionMessage(server, sub, retransmission);
     }
 
     /* Get the available sequence numbers from the retransmission queue */
-    size_t available = 0;
-    UA_NotificationMessageEntry *nme;
-    LIST_FOREACH(nme, &sub->retransmissionQueue, listEntry)
-        available++;
-    // cppcheck-suppress knownConditionTrueFalse
+    size_t available = sub->retransmissionQueueSize;
     if(available > 0) {
         response->availableSequenceNumbers = UA_alloca(available * sizeof(UA_UInt32));
         response->availableSequenceNumbersSize = available;
-    }
-    size_t i = 0;
-    LIST_FOREACH(nme, &sub->retransmissionQueue, listEntry) {
-        response->availableSequenceNumbers[i] = nme->message.sequenceNumber;
-        i++;
+        size_t i = 0;
+        UA_NotificationMessageEntry *nme;
+        TAILQ_FOREACH(nme, &sub->retransmissionQueue, listEntry) {
+            response->availableSequenceNumbers[i] = nme->message.sequenceNumber;
+            ++i;
+        }
     }
 
     /* Send the response */
@@ -489,6 +565,9 @@ Subscription_registerPublishJob(UA_Server *server, UA_Subscription *sub) {
     if(sub->publishJobIsRegistered)
         return UA_STATUSCODE_GOOD;
 
+    UA_LOG_DEBUG_SESSION(server->config.logger, sub->session,
+                         "Subscription %u | Register subscription publishing callback",
+                         sub->subscriptionID);
     UA_Job job;
     job.type = UA_JOBTYPE_METHODCALL;
     job.job.methodCall.method = (UA_ServerCallback)UA_Subscription_publishCallback;
@@ -505,6 +584,9 @@ UA_StatusCode
 Subscription_unregisterPublishJob(UA_Server *server, UA_Subscription *sub) {
     if(!sub->publishJobIsRegistered)
         return UA_STATUSCODE_GOOD;
+    UA_LOG_DEBUG_SESSION(server->config.logger, sub->session,
+                         "Subscription %u | Unregister subscription publishing callback",
+                         sub->subscriptionID);
     sub->publishJobIsRegistered = false;
     return UA_Server_removeRepeatedJob(server, sub->publishJobGuid);
 }
