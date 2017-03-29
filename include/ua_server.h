@@ -151,6 +151,8 @@ typedef struct {
 UA_UInt16 UA_EXPORT UA_Server_addNamespace(UA_Server *server, const char* name);
 
 /**
+ * .. _server-lifecycle:
+ *
  * Server Lifecycle
  * ---------------- */
 UA_Server UA_EXPORT * UA_Server_new(const UA_ServerConfig config);
@@ -524,6 +526,10 @@ UA_Server_browse(UA_Server *server, UA_UInt32 maxrefs,
 UA_BrowseResult UA_EXPORT
 UA_Server_browseNext(UA_Server *server, UA_Boolean releaseContinuationPoint,
                      const UA_ByteString *continuationPoint);
+
+UA_BrowsePathResult UA_EXPORT
+UA_Server_translateBrowsePathToNodeIds(UA_Server *server,
+                                       const UA_BrowsePath *browsePath);
 
 #ifndef HAVE_NODEITER_CALLBACK
 #define HAVE_NODEITER_CALLBACK

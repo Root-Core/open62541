@@ -87,9 +87,16 @@ compatibleArrayDimensions(size_t constraintArrayDimensionsSize,
                           const UA_UInt32 *constraintArrayDimensions,
                           size_t testArrayDimensionsSize,
                           const UA_UInt32 *testArrayDimensions) {
+    /* No array dimensions defined -> everything is permitted if the value rank fits */
+    if(constraintArrayDimensionsSize == 0) {
+        return UA_STATUSCODE_GOOD;
+    }
+
+    /* Dimension count must match */
     if(testArrayDimensionsSize != constraintArrayDimensionsSize)
         return UA_STATUSCODE_BADTYPEMISMATCH;
-    /* dimension size zero in the constraint is a wildcard */
+
+    /* Dimension lengths must match; zero in the constraint is a wildcard */
     for(size_t i = 0; i < constraintArrayDimensionsSize; ++i) {
         if(constraintArrayDimensions[i] != testArrayDimensions[i] &&
            constraintArrayDimensions[i] != 0)
@@ -1113,7 +1120,8 @@ CopyAttributeIntoNode(UA_Server *server, UA_Session *session,
     }
     if(retval != UA_STATUSCODE_GOOD)
         UA_LOG_INFO_SESSION(server->config.logger, session,
-                            "WriteRequest returned status code 0x%08x", retval);
+                            "WriteRequest returned status code %s",
+                            UA_StatusCode_name(retval));
     return retval;
 }
 
