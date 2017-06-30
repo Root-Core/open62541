@@ -27,7 +27,7 @@ Building with CMake on Ubuntu or Debian
    # enable additional features
    sudo apt-get install liburcu-dev # for multithreading
    sudo apt-get install check # for unit tests
-   sudo apt-get install sphinx graphviz # for documentation generation
+   sudo apt-get install python-sphinx graphviz # for documentation generation
    sudo apt-get install python-sphinx-rtd-theme # documentation style
 
    cd open62541
@@ -189,8 +189,6 @@ be visible in the cmake GUIs.
    ``UA_GENERATE_NAMESPACE0_FILE`` is used to specify the file for NS0 generation from namespace0 folder. Default value is ``Opc.Ua.NodeSet2.xml``
 **UA_ENABLE_EMBEDDED_LIBC**
    Use a custom implementation of some libc functions that might be missing on embedded targets (e.g. string handling).
-**UA_ENABLE_EXTERNAL_NAMESPACES**
-  Enable namespace handling by an external component (experimental)
 **UA_ENABLE_NONSTANDARD_STATELESS**
    Enable stateless extension
 **UA_ENABLE_NONSTANDARD_UDP**

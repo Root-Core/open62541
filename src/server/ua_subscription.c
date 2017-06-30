@@ -1,5 +1,5 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
-*  License, v. 2.0. If a copy of the MPL was not distributed with this 
+*  License, v. 2.0. If a copy of the MPL was not distributed with this
 *  file, You can obtain one at http://mozilla.org/MPL/2.0/.*/
 
 #include "ua_subscription.h"
@@ -18,6 +18,8 @@
 
 UA_MonitoredItem * UA_MonitoredItem_new() {
     UA_MonitoredItem *new = UA_malloc(sizeof(UA_MonitoredItem));
+    if(!new)
+        return NULL;
     new->subscription = NULL;
     new->currentQueueSize = 0;
     new->maxQueueSize = 0;
@@ -75,10 +77,12 @@ detectValueChange(UA_MonitoredItem *mon, UA_DataValue *value,
     UA_Boolean hasValue = value->hasValue;
     if(mon->trigger == UA_DATACHANGETRIGGER_STATUS)
         value->hasValue = false;
+
     UA_Boolean hasServerTimestamp = value->hasServerTimestamp;
     UA_Boolean hasServerPicoseconds = value->hasServerPicoseconds;
     value->hasServerTimestamp = false;
     value->hasServerPicoseconds = false;
+
     UA_Boolean hasSourceTimestamp = value->hasSourceTimestamp;
     UA_Boolean hasSourcePicoseconds = value->hasSourcePicoseconds;
     if(mon->trigger < UA_DATACHANGETRIGGER_STATUSVALUETIMESTAMP) {
@@ -133,13 +137,6 @@ void UA_MoniteredItem_SampleCallback(UA_Server *server, UA_MonitoredItem *monito
         return;
     }
 
-    /* Adjust timestampstoreturn to get source timestamp for triggering */
-    UA_TimestampsToReturn ts = monitoredItem->timestampsToReturn;
-    if(ts == UA_TIMESTAMPSTORETURN_SERVER)
-        ts = UA_TIMESTAMPSTORETURN_BOTH;
-    else if(ts == UA_TIMESTAMPSTORETURN_NEITHER)
-        ts = UA_TIMESTAMPSTORETURN_SOURCE;
-
     /* Read the value */
     UA_ReadValueId rvid;
     UA_ReadValueId_init(&rvid);
@@ -148,7 +145,8 @@ void UA_MoniteredItem_SampleCallback(UA_Server *server, UA_MonitoredItem *monito
     rvid.indexRange = monitoredItem->indexRange;
     UA_DataValue value;
     UA_DataValue_init(&value);
-    Service_Read_single(server, sub->session, ts, &rvid, &value);
+    Service_Read_single(server, sub->session, monitoredItem->timestampsToReturn,
+                        &rvid, &value);
 
     /* Stack-allocate some memory for the value encoding */
     UA_Byte *stackValueEncoding = UA_alloca(UA_VALUENCODING_MAXSTACK);
@@ -427,7 +425,7 @@ prepareNotificationMessage(UA_Subscription *sub, UA_NotificationMessage *message
         }
     }
     return UA_STATUSCODE_GOOD;
-    
+
  cleanup:
     UA_NotificationMessage_deleteMembers(message);
     return UA_STATUSCODE_BADOUTOFMEMORY;
@@ -549,7 +547,7 @@ void UA_Subscription_publishCallback(UA_Server *server, UA_Subscription *sub) {
     sub->state = UA_SUBSCRIPTIONSTATE_NORMAL;
     sub->currentKeepAliveCount = 0;
     sub->currentLifetimeCount = 0;
-    
+
     /* Free the response */
     UA_Array_delete(response->results, response->resultsSize,
                     &UA_TYPES[UA_TYPES_UINT32]);

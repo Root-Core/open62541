@@ -1,5 +1,5 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
-*  License, v. 2.0. If a copy of the MPL was not distributed with this 
+*  License, v. 2.0. If a copy of the MPL was not distributed with this
 *  file, You can obtain one at http://mozilla.org/MPL/2.0/.*/
 
 #include "ua_util.h"
@@ -317,8 +317,8 @@ processRepeatedJobs(UA_Server *server, UA_DateTime current, UA_Boolean *dispatch
 /* Call this function only from the main loop! */
 static void
 removeRepeatedJob(UA_Server *server, UA_Guid *jobId) {
-    struct RepeatedJob *rj;
-    LIST_FOREACH(rj, &server->repeatedJobs, next) {
+    struct RepeatedJob *rj, *rj_tmp;
+    LIST_FOREACH_SAFE(rj, &server->repeatedJobs, next, rj_tmp) {
         if(!UA_Guid_equal(jobId, &rj->id))
             continue;
         LIST_REMOVE(rj, next);
@@ -359,6 +359,15 @@ void UA_Server_deleteAllRepeatedJobs(UA_Server *server) {
 /****************/
 /* Delayed Jobs */
 /****************/
+
+static void
+delayed_free(UA_Server *server, void *data) {
+    UA_free(data);
+}
+
+UA_StatusCode UA_Server_delayedFree(UA_Server *server, void *data) {
+    return UA_Server_delayedCallback(server, delayed_free, data);
+}
 
 #ifndef UA_ENABLE_MULTITHREADING
 
@@ -411,7 +420,8 @@ static void getCounters(UA_Server *server, struct DelayedJobs *delayed) {
 /* Call from the main thread only. This is the only function that modifies */
 /* server->delayedWork. processDelayedWorkQueue modifies the "next" (after the */
 /* head). */
-static void addDelayedJob(UA_Server *server, UA_Job *job) {
+static void
+addDelayedJob(UA_Server *server, UA_Job *job) {
     struct DelayedJobs *dj = server->delayedJobs;
     if(!dj || dj->jobsCount >= DELAYEDJOBSSIZE) {
         /* create a new DelayedJobs and add it to the linked list */
@@ -436,15 +446,6 @@ static void addDelayedJob(UA_Server *server, UA_Job *job) {
     }
     dj->jobs[dj->jobsCount] = *job;
     ++dj->jobsCount;
-}
-
-static void
-delayed_free(UA_Server *server, void *data) {
-    UA_free(data);
-}
-
-UA_StatusCode UA_Server_delayedFree(UA_Server *server, void *data) {
-    return UA_Server_delayedCallback(server, delayed_free, data);
 }
 
 static void
