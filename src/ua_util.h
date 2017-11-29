@@ -6,6 +6,7 @@
 #define UA_UTIL_H_
 
 #include "ua_config.h"
+#include "ua_types.h"
 
 /* Assert */
 #include <assert.h>
@@ -18,7 +19,12 @@
 #define container_of(ptr, type, member) \
     (type *)((uintptr_t)ptr - offsetof(type,member))
 
-/* Thread Local Storage */
+/* Thread-Local Storage
+ * --------------------
+ * Thread-local variables are always enabled. Also when the library is built
+ * with ``UA_ENABLE_MULTITHREADING`` disabled. Otherwise, if multiple clients
+ * run in separate threads, race conditions may occur via global variables in
+ * the encoding layer. */
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 # define UA_THREAD_LOCAL _Thread_local /* C11 */
 #elif defined(__GNUC__)
@@ -26,10 +32,23 @@
 #elif defined(_MSC_VER)
 # define UA_THREAD_LOCAL __declspec(thread) /* MSVC extension */
 #else
+# warning The compiler does not support thread-local variables
 # define UA_THREAD_LOCAL
-# warning The compiler does not allow thread-local variables. \
-  The library can be built, but will not be thread-safe.
 #endif
+
+/* Integer Shortnames
+ * ------------------
+ * These are not exposed on the public API, since many user-applications make
+ * the same definitions in their headers. */
+typedef UA_Byte u8;
+typedef UA_SByte i8;
+typedef UA_UInt16 u16;
+typedef UA_Int16 i16;
+typedef UA_UInt32 u32;
+typedef UA_Int32 i32;
+typedef UA_UInt64 u64;
+typedef UA_Int64 i64;
+typedef UA_StatusCode status;
 
 /* Atomic Operations
  * -----------------

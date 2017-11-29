@@ -13,17 +13,19 @@ find_package(Git)
 set(OPEN62541_VER_MAJOR 0)
 set(OPEN62541_VER_MINOR 2)
 set(OPEN62541_VER_PATCH 0)
-set(OPEN62541_VER_LABEL "") # Appended to the X.Y.Z version format. For example "-rc1" or an empty string
+set(OPEN62541_VER_LABEL "dev") # Appended to the X.Y.Z version format. For example "-rc1" or an empty string
+
+set(LIB_INSTALL_DIR lib CACHE PATH "Installation path of libraries")
 
 # Set OPEN62541_VER_COMMIT
 if(GIT_FOUND)
-  execute_process(COMMAND ${GIT_EXECUTABLE} describe --always --tags
-                  RESULT_VARIABLE res_var OUTPUT_VARIABLE GIT_COM_ID WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    execute_process(COMMAND ${GIT_EXECUTABLE} describe --always --tags
+                    RESULT_VARIABLE res_var OUTPUT_VARIABLE GIT_COM_ID WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     if(${res_var} EQUAL 0)
         string(REPLACE "\n" "" OPEN62541_VER_COMMIT ${GIT_COM_ID} )
     endif()
 endif()
-if(NOT ${OPEN62541_VER_COMMIT} OR ${OPEN62541_VER_COMMIT} STREQUAL "")
+if(NOT OPEN62541_VER_COMMIT OR OPEN62541_VER_COMMIT STREQUAL "")
     set(OPEN62541_VER_COMMIT "undefined")
 endif()
 
@@ -111,7 +113,7 @@ mark_as_advanced(UA_COMPILE_AS_CXX)
 list(APPEND open62541_LIBRARIES "")
 if(NOT WIN32)
   list(APPEND open62541_LIBRARIES pthread)
-  if (NOT APPLE)
+  if(NOT APPLE AND (NOT ${CMAKE_SYSTEM_NAME} MATCHES "OpenBSD"))
     list(APPEND open62541_LIBRARIES rt)
   endif()
 else()
@@ -126,8 +128,8 @@ if(CMAKE_COMPILER_IS_GNUCC OR "x${CMAKE_C_COMPILER_ID}" STREQUAL "xClang")
     add_definitions(-std=c99 -pipe -Wall -Wextra -Werror -Wformat -Wno-unused-parameter
                     -Wno-unused-function -Wno-unused-label -Wpointer-arith -Wreturn-type -Wsign-compare
                     -Wmultichar -Wstrict-overflow -Wcast-qual -Wmissing-prototypes -Wstrict-prototypes
-                    -Winit-self -Wuninitialized -Wformat-security -Wformat-nonliteral)
-    if(NOT WIN32 AND NOT CYGWIN)
+                    -Winit-self -Wformat-security -Wformat-nonliteral)
+    if(NOT WIN32 AND NOT CYGWIN AND (NOT ${CMAKE_SYSTEM_NAME} MATCHES "OpenBSD"))
         add_definitions(-Wshadow -Wconversion -fvisibility=hidden -fPIC)
     endif()
 
@@ -297,6 +299,12 @@ add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/ua_types_generated
                            ${PROJECT_SOURCE_DIR}/tools/schema/datatypes_minimal.txt
                            ${CMAKE_CURRENT_SOURCE_DIR}/tools/schema/Opc.Ua.Types.bsd
                            ${CMAKE_CURRENT_SOURCE_DIR}/tools/schema/NodeIds.csv)
+# we need a custom target to avoid that the generator is called concurrently and thus overwriting files while the other thread is compiling
+add_custom_target(open62541-generator-types DEPENDS
+        ${PROJECT_BINARY_DIR}/src_generated/ua_types_generated.c
+        ${PROJECT_BINARY_DIR}/src_generated/ua_types_generated.h
+        ${PROJECT_BINARY_DIR}/src_generated/ua_types_generated_handling.h
+        ${PROJECT_BINARY_DIR}/src_generated/ua_types_generated_encoding_binary.h)
 
 # transport data types
 add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/ua_transport_generated.c
@@ -312,6 +320,12 @@ add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/ua_transport_gener
                    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_datatypes.py
                            ${PROJECT_SOURCE_DIR}/tools/schema/datatypes_transport.txt
                            ${CMAKE_CURRENT_SOURCE_DIR}/tools/schema/Custom.Opc.Ua.Transport.bsd)
+# we need a custom target to avoid that the generator is called concurrently and thus overwriting files while the other thread is compiling
+add_custom_target(open62541-generator-transport DEPENDS
+        ${PROJECT_BINARY_DIR}/src_generated/ua_transport_generated.c
+        ${PROJECT_BINARY_DIR}/src_generated/ua_transport_generated.h
+        ${PROJECT_BINARY_DIR}/src_generated/ua_transport_generated_handling.h
+        ${PROJECT_BINARY_DIR}/src_generated/ua_transport_generated_encoding_binary.h)
 
 # nodeids
 add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/ua_nodeids.h
@@ -329,6 +343,10 @@ add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/ua_statuscode_desc
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_statuscode_descriptions.py
         ${CMAKE_CURRENT_SOURCE_DIR}/tools/schema/Opc.Ua.StatusCodes.csv)
 list(APPEND lib_sources ${PROJECT_BINARY_DIR}/src_generated/ua_statuscode_descriptions.c)
+# we need a custom target to avoid that the generator is called concurrently and thus overwriting files while the other thread is compiling
+add_custom_target(open62541-generator-statuscode DEPENDS
+                  ${PROJECT_BINARY_DIR}/src_generated/ua_statuscode_descriptions.c)
+
 
 # generated namespace 0
 add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/ua_namespaceinit_generated.c
@@ -362,25 +380,11 @@ add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/open62541.c
                            ${internal_headers} ${lib_sources} ${default_plugin_sources}
                    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/amalgamate.py ${internal_headers} ${lib_sources})
 
-ADD_CUSTOM_TARGET(open625451_amalgamation DEPENDS ${PROJECT_BINARY_DIR}/open62541.h
-                                                  ${PROJECT_BINARY_DIR}/open62541.c)
+add_custom_target(open62541-amalgamation-source DEPENDS ${PROJECT_BINARY_DIR}/open62541.c)
+add_custom_target(open62541-amalgamation-header DEPENDS ${PROJECT_BINARY_DIR}/open62541.h)
 
-# example information model from nodeset xml
-add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/nodeset.h ${PROJECT_BINARY_DIR}/src_generated/nodeset.c
-                  PRE_BUILD
-                  COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/generate_open62541CCode.py
-                                                -i ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/NodeID_Blacklist_FullNS0.txt
-                                                ${PROJECT_SOURCE_DIR}/tools/schema/namespace0/Opc.Ua.NodeSet2.xml
-                                                ${PROJECT_SOURCE_DIR}/examples/server_nodeset.xml
-                                                ${PROJECT_BINARY_DIR}/src_generated/nodeset
-                  DEPENDS ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/generate_open62541CCode.py
-                          ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/open62541_MacroHelper.py
-                          ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/ua_builtin_types.py
-                          ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/ua_constants.py
-                          ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/ua_namespace.py
-                          ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/ua_node_types.py
-                          ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/NodeID_Blacklist_FullNS0.txt
-                          ${PROJECT_SOURCE_DIR}/examples/server_nodeset.xml)
+add_dependencies(open62541-amalgamation-source open62541-generator-types open62541-generator-transport open62541-generator-statuscode)
+add_dependencies(open62541-amalgamation-header open62541-generator-types)
 
 #####################
 # Build the Library #
@@ -389,6 +393,18 @@ add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/nodeset.h ${PROJEC
 if(UA_ENABLE_AMALGAMATION)
     include_directories(${PROJECT_BINARY_DIR}) # contains open62541.h
     add_library(open62541-object OBJECT ${PROJECT_BINARY_DIR}/open62541.c ${PROJECT_BINARY_DIR}/open62541.h)
+    # make sure the open62541_amalgamation target builds before so that amalgamation is finished and it is not executed again for open62541-object
+    # and thus may overwrite the amalgamation result during multiprocessor compilation
+    # the header is already a dependency of open62541 target itself
+    add_dependencies(open62541-object
+                     open62541-amalgamation-header
+                     open62541-generator-types
+                     open62541-generator-transport
+                     open62541-generator-statuscode
+                     open62541-amalgamation-source
+                     )
+
+
     add_library(open62541 $<TARGET_OBJECTS:open62541-object>)
 
     if(UA_COMPILE_AS_CXX)
@@ -397,9 +413,15 @@ if(UA_ENABLE_AMALGAMATION)
 else()
     add_definitions(-DUA_NO_AMALGAMATION)
     add_library(open62541-object OBJECT ${lib_sources} ${internal_headers} ${exported_headers})
+    add_dependencies(open62541-object
+                     open62541-amalgamation-header
+                     open62541-generator-types
+                     open62541-generator-transport
+                     open62541-generator-statuscode)
     target_include_directories(open62541-object PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
     add_library(open62541-plugins OBJECT ${default_plugin_sources} ${exported_headers})
+    add_dependencies(open62541-plugins open62541-generator-types open62541-generator-transport)
     target_include_directories(open62541-plugins PRIVATE ${PROJECT_SOURCE_DIR}/plugins)
     target_include_directories(open62541-plugins PRIVATE ${PROJECT_BINARY_DIR}/src_generated)
     target_compile_definitions(open62541-plugins PRIVATE -DUA_DYNAMIC_LINKING_EXPORT)
@@ -412,6 +434,14 @@ else()
     endif()
 endif()
 
+if(UA_ENABLE_GENERATE_NAMESPACE0)
+    add_dependencies(open62541-amalgamation-source open62541-generator-namespace)
+    add_dependencies(open62541-amalgamation-header open62541-generator-namespace)
+    if(NOT UA_ENABLE_AMALGAMATION)
+        add_dependencies(open62541-object open62541-generator-namespace)
+    endif()
+endif()
+
 # Export Symbols
 target_compile_definitions(open62541-object PRIVATE -DUA_DYNAMIC_LINKING_EXPORT)
 target_compile_definitions(open62541 PRIVATE -DUA_DYNAMIC_LINKING_EXPORT)
@@ -420,7 +450,7 @@ target_compile_definitions(open62541 PRIVATE -DUA_DYNAMIC_LINKING_EXPORT)
 target_link_libraries(open62541 ${open62541_LIBRARIES})
 
 # Always generate the amalgamated header
-add_dependencies(open62541 open625451_amalgamation)
+add_dependencies(open62541 open62541-amalgamation-header)
 
 # Generate properly versioned shared library links on Linux
 SET_TARGET_PROPERTIES(open62541 PROPERTIES SOVERSION 0 VERSION "${OPEN62541_VER_MAJOR}.${OPEN62541_VER_MINOR}.${OPEN62541_VER_PATCH}")
@@ -443,11 +473,6 @@ if(UA_BUILD_UNIT_TESTS)
     endif()
     enable_testing()
     add_subdirectory(tests)
-endif()
-
-if(UA_BUILD_EXAMPLES_NODESET_COMPILER)
-  add_custom_target(generate_informationmodel ALL
-                    DEPENDS ${PROJECT_BINARY_DIR}/src_generated/nodeset.h ${PROJECT_BINARY_DIR}/src_generated/nodeset.c)
 endif()
 
 ############################
@@ -481,8 +506,8 @@ add_dependencies(lint open62541)
 
 # export library (either static or shared depending on BUILD_SHARED_LIBS)
 install(TARGETS open62541
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib)
+        LIBRARY DESTINATION ${LIB_INSTALL_DIR} 
+        ARCHIVE DESTINATION ${LIB_INSTALL_DIR}) 
 # export amalgamated header open62541.h which is generated due to build of open62541-object
 install(FILES ${PROJECT_BINARY_DIR}/open62541.h DESTINATION include)
 
