@@ -613,3 +613,44 @@ UA_Client_readHistorical_modified(UA_Client *client, const UA_NodeId nodeId,
     return __UA_Client_readHistorical_service_rawMod(client, nodeId, callback, startTime, endTime, returnBounds,
                                                      maxItems, UA_TRUE, timestampsToReturn, handle);
 }
+
+UA_StatusCode
+UA_Client_readHistorical_atTime(UA_Client *client, const UA_NodeId nodeId,
+                                UA_DateTime *timestamps, const size_t size,
+                                const UA_Boolean interpolate, const UA_TimestampsToReturn timestampsToReturn,
+                                UA_HistoryData *outData) {
+
+    // FIXME: We might check, if size is > server capabilities operation limit for history read (0, 12165)
+    UA_ReadAtTimeDetails details;
+    UA_ReadAtTimeDetails_init(&details);
+    details.reqTimes = timestamps;
+    details.reqTimesSize = size;
+    details.useSimpleBounds = !interpolate;
+
+    /* We release the continuation point, if no more data is requested by the user */
+    UA_HistoryReadResponse response =
+        __UA_Client_readHistorical(client, nodeId, &details, timestampsToReturn, UA_BYTESTRING_NULL, UA_FALSE);
+
+    UA_StatusCode retval = response.responseHeader.serviceResult;
+    if (retval == UA_STATUSCODE_GOOD) {
+        if (response.resultsSize == 1)
+            retval = response.results[0].statusCode;
+        else
+            retval = UA_STATUSCODE_BADUNEXPECTEDERROR;
+    }
+    if (retval != UA_STATUSCODE_GOOD)
+        goto cleanup;
+
+    UA_HistoryReadResult *res = response.results;
+    outData = (UA_HistoryData*)res->historyData.content.decoded.data;
+
+    /* We should receive the same amount of data as requested */
+    if (outData->dataValuesSize != size) {
+        retval = UA_STATUSCODE_BADUNEXPECTEDERROR;
+    }
+
+    /* Cleanup */
+cleanup:
+    UA_HistoryReadResponse_deleteMembers(&response);
+    return retval;
+}

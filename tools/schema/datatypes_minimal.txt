@@ -202,6 +202,7 @@ HistoryReadResult
 HistoryReadDetails
 ReadRawModifiedDetails
 ReadEventDetails
+ReadAtTimeDetails
 HistoryData
 HistoryReadRequest
 HistoryReadResponse

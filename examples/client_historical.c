@@ -153,6 +153,18 @@ int main(int argc, char *argv[]) {
         printf("Failed.\n");
     }
 
+    //UA_DateTime dt = UA_DateTime_now() - (1500 * UA_DATETIME_MSEC);
+    
+    UA_HistoryData outData;
+    UA_DateTime *dt = (UA_DateTime *)UA_Array_new(5, &UA_TYPES[UA_TYPES_DATETIME]);
+    dt[0] = 0x01d3a76dceecdde0;
+    dt[1] = 0x01d3a76dcf3a88b0;
+    dt[2] = 0x01d3a76dcf87e560;
+    dt[3] = 0x01d3a76dcfd51b00;
+    dt[4] = 0x01d3a76dd021b460;
+
+    UA_Client_readHistorical_atTime(client, UA_NODEID_STRING(4, "Demo.History.DoubleWithHistory"), dt, 5, false, UA_TIMESTAMPSTORETURN_BOTH, &outData);
+
 cleanup:
     UA_Client_disconnect(client);
     UA_Client_delete(client);
