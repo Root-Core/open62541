@@ -292,11 +292,6 @@ class VariableNode(Node):
 
         self.value = Value()
         self.value.parseXMLEncoding(self.xmlValueDef, dataTypeNode, self)
-
-        # Array Dimensions must accurately represent the value and will be patched
-        # reflect the exaxt dimensions attached binary stream.
-        if not isinstance(self.value, Value) or len(self.value.value) == 0:
-            self.arrayDimensions = []
         return True
 
 
@@ -309,9 +304,15 @@ class VariableTypeNode(VariableNode):
             self.parseXML(xmlelement)
 
     def parseXML(self, xmlelement):
-        Node.parseXML(self, xmlelement)
+        VariableNode.parseXML(self, xmlelement)
         for (at, av) in xmlelement.attributes.items():
             if at == "IsAbstract":
+                self.isAbstract = "false" not in av.lower()
+
+        for x in xmlelement.childNodes:
+            if x.nodeType != x.ELEMENT_NODE:
+                continue
+            if x.localName == "IsAbstract":
                 self.isAbstract = "false" not in av.lower()
 
 class MethodNode(Node):

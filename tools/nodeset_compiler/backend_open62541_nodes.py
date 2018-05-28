@@ -72,19 +72,9 @@ def generateObjectNodeCode(node):
         code.append("attr.eventNotifier = true;")
     return code
 
-def generateVariableNodeCode(node, nodeset, max_string_length):
+def generateCommonVariableCode(node, nodeset, max_string_length):
     code = []
     codeCleanup = []
-    code.append("UA_VariableAttributes attr = UA_VariableAttributes_default;")
-    if node.historizing:
-        code.append("attr.historizing = true;")
-    code.append("attr.minimumSamplingInterval = %f;" % node.minimumSamplingInterval)
-    code.append("attr.userAccessLevel = %d;" % node.userAccessLevel)
-    code.append("attr.accessLevel = %d;" % node.accessLevel)
-    # in order to be compatible with mostly OPC UA client
-    # force valueRank = -1 for scalar VariableNode
-    if node.valueRank == -2:
-        node.valueRank = -1
     code.append("attr.valueRank = %d;" % node.valueRank)
     if node.valueRank > 0:
         code.append("attr.arrayDimensionsSize = %d;" % node.valueRank)
@@ -98,53 +88,77 @@ def generateVariableNodeCode(node, nodeset, max_string_length):
                 code.append("attr.arrayDimensions[{}] = 0;".format(dim))
 
     if node.dataType is not None:
-        if isinstance(node.dataType, NodeId) and node.dataType.ns == 0 and node.dataType.i == 0:
+        if (isinstance(node.dataType, NodeId) and node.dataType.ns == 0 and node.dataType.i == 0):
             #BaseDataType
             dataTypeNode = nodeset.nodes[NodeId("i=24")]
-            dataTypeNodeOpaque = nodeset.nodes[NodeId("i=24")]
+            dataTypeNodeOpaque = dataTypeNode
+        elif isinstance(node, VariableNode):
+            dataTypeNode = nodeset.getDataTypeNode(node.dataType)
+            dataTypeNodeOpaque = dataTypeNode
         else:
-            dataTypeNodeOpaque = nodeset.getDataTypeNode(node.dataType)
             dataTypeNode = nodeset.getBaseDataType(nodeset.getDataTypeNode(node.dataType))
+            dataTypeNodeOpaque = nodeset.getBaseDataType(nodeset.getDataTypeNode(node.dataType))
 
-        if dataTypeNode is not None:
+        if dataTypeNodeOpaque is not None:
             code.append("attr.dataType = %s;" % generateNodeIdCode(dataTypeNodeOpaque.id))
 
+        if dataTypeNode is not None:
             if dataTypeNode.isEncodable():
                 if node.value is not None:
                     [code1, codeCleanup1] = generateValueCode(node.value, nodeset.nodes[node.id], nodeset, max_string_length=max_string_length)
                     code += code1
                     codeCleanup += codeCleanup1
-                    if node.valueRank > 0 and len(node.arrayDimensions) == node.valueRank:
-                        code.append("attr.value.arrayDimensionsSize = attr.arrayDimensionsSize;")
-                        code.append("attr.value.arrayDimensions = attr.arrayDimensions;")
+                    if node.valueRank > 0 and len(node.arrayDimensions) == node.valueRank and len(node.value.value) > 0:
+                        numElements = 1
+                        hasZero = False
+                        for v in node.arrayDimensions:
+                            dim = int(unicode(v))
+                            if dim > 0:
+                                numElements = numElements * dim
+                            else:
+                                hasZero = True
+                        if hasZero == False and len(node.value.value) == numElements:
+                            code.append("attr.value.arrayDimensionsSize = attr.arrayDimensionsSize;")
+                            code.append("attr.value.arrayDimensions = attr.arrayDimensions;")
+                            logger.warning("printing arrayDimensions")
+                        else:
+                            logger.error("Dimension with size 0 or value count mismatch detected, ArrayDimensions won't be copied to the Value attribute.")
                 else:
-                    code += generateValueCodeDummy(dataTypeNode, nodeset.nodes[node.id], nodeset)
+                    if isinstance(node, VariableNode): # Don't generate a dummy value for VariableType nodes
+                        code += generateValueCodeDummy(dataTypeNode, nodeset.nodes[node.id], nodeset)
+
+    return [code, codeCleanup]
+
+def generateVariableNodeCode(node, nodeset, max_string_length):
+    code = []
+    codeCleanup = []
+    code.append("UA_VariableAttributes attr = UA_VariableAttributes_default;")
+    if node.historizing:
+        code.append("attr.historizing = true;")
+    code.append("attr.minimumSamplingInterval = %f;" % node.minimumSamplingInterval)
+    code.append("attr.userAccessLevel = %d;" % node.userAccessLevel)
+    code.append("attr.accessLevel = %d;" % node.accessLevel)
+    # in order to be compatible with mostly OPC UA client
+    # force valueRank = -1 for scalar VariableNode
+    if node.valueRank == -2 and node.value is not None and len(node.value.value) == 1:
+        node.valueRank = -1
+
+    [code1, codeCleanup1] = generateCommonVariableCode(node, nodeset, max_string_length)
+    code += code1
+    codeCleanup += codeCleanup1
+
     return [code, codeCleanup]
 
 def generateVariableTypeNodeCode(node, nodeset, max_string_length):
     code = []
     codeCleanup = []
     code.append("UA_VariableTypeAttributes attr = UA_VariableTypeAttributes_default;")
-    if node.historizing:
-        code.append("attr.historizing = true;")
     if node.isAbstract:
         code.append("attr.isAbstract = true;")
-    code.append("attr.valueRank = (UA_Int32)%s;" % str(node.valueRank))
-    if node.dataType is not None:
-        if isinstance(node.dataType, NodeId) and node.dataType.ns == 0 and node.dataType.i == 0:
-            #BaseDataType
-            dataTypeNode = nodeset.nodes[NodeId("i=24")]
-        else:
-            dataTypeNode = nodeset.getBaseDataType(nodeset.getDataTypeNode(node.dataType))
-        if dataTypeNode is not None:
-            code.append("attr.dataType = %s;" % generateNodeIdCode(dataTypeNode.id))
-            if dataTypeNode.isEncodable():
-                if node.value is not None:
-                    [code1, codeCleanup1] = generateValueCode(node.value, nodeset.nodes[node.id], nodeset, max_string_length)
-                    code += code1
-                    codeCleanup += codeCleanup1
-                else:
-                    code += generateValueCodeDummy(dataTypeNode, nodeset.nodes[node.id], nodeset)
+    [code1, codeCleanup1] = generateCommonVariableCode(node, nodeset, max_string_length)
+    code += code1
+    codeCleanup += codeCleanup1
+
     return [code, codeCleanup]
 
 def generateExtensionObjectSubtypeCode(node, parent, nodeset, recursionDepth=0, arrayIndex=0, max_string_length=0):

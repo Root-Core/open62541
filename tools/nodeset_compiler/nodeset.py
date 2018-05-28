@@ -273,7 +273,7 @@ class NodeSet(object):
 
     def allocateVariables(self):
         for n in self.nodes.values():
-            if isinstance(n, VariableNode):
+            if isinstance(n, VariableNode) or isinstance(n, VariableTypeNode):
                 n.allocateValue(self)
 
     def getBaseDataType(self, node):
