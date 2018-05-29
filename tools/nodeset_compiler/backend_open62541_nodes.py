@@ -75,6 +75,21 @@ def generateObjectNodeCode(node):
 def generateCommonVariableCode(node, nodeset, max_string_length):
     code = []
     codeCleanup = []
+
+    # Use ValueRank and ArrayDimensions from the type / supertype
+    if node.valueRank == None:
+        typeNode = None
+        if isinstance(node, VariableNode):
+            typeNode = nodeset.getVariableTypeNode(node)
+        if isinstance(node, VariableTypeNode):
+            typeNode = nodeset.getVariableTypeSupertypeNode(node)
+        if typeNode is not None:
+            if typeNode.valueRank is not None:
+                node.valueRank = typeNode.valueRank
+            node.arrayDimensions = typeNode.arrayDimensions
+    if node.valueRank is None:
+        node.valueRank = -2
+
     code.append("attr.valueRank = %d;" % node.valueRank)
     if node.valueRank > 0:
         code.append("attr.arrayDimensionsSize = %d;" % node.valueRank)

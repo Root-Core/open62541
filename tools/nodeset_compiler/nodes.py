@@ -229,7 +229,7 @@ class VariableNode(Node):
         Node.__init__(self)
         self.nodeClass = NODE_CLASS_VARIABLE
         self.dataType = NodeId()
-        self.valueRank = -2
+        self.valueRank = None
         self.arrayDimensions = []
         # Set access levels to read by default
         self.accessLevel = 1
