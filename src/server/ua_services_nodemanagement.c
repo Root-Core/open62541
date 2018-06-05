@@ -203,11 +203,13 @@ typeCheckVariableNode(UA_Server *server, UA_Session *session,
     }
 
     /* Check array dimensions against the vt */
-    if(!compatibleArrayDimensions(vt->arrayDimensionsSize, vt->arrayDimensions,
-                                  node->arrayDimensionsSize, node->arrayDimensions)) {
-        UA_LOG_INFO_SESSION(server->config.logger, session,
-                            "AddNodes: The array dimensions are incomatible with the array dimensions of the VariableType");
-        return UA_STATUSCODE_BADTYPEMISMATCH;
+    if (vt->valueRank != -2) {
+        if(!compatibleArrayDimensions(vt->arrayDimensionsSize, vt->arrayDimensions,
+                                      node->arrayDimensionsSize, node->arrayDimensions)) {
+            UA_LOG_INFO_SESSION(server->config.logger, session,
+                                "AddNodes: The array dimensions are incomatible with the array dimensions of the VariableType");
+            return UA_STATUSCODE_BADTYPEMISMATCH;
+        }
     }
 
     /* Typecheck the value */

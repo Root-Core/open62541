@@ -273,7 +273,7 @@ class NodeSet(object):
 
     def allocateVariables(self):
         for n in self.nodes.values():
-            if isinstance(n, VariableNode):
+            if isinstance(n, VariableNode) or isinstance(n, VariableTypeNode):
                 n.allocateValue(self)
 
     def getBaseDataType(self, node):
@@ -287,7 +287,29 @@ class NodeSet(object):
             if ref.referenceType.i == 45:
                 return self.getBaseDataType(self.nodes[ref.target])
         return node
-                
+
+    def getVariableTypeNode(self, node):
+        if node is None:
+            return None
+        if node.nodeClass != NODE_CLASS_VARIABLE:
+            return None
+        for ref in node.references:
+            if ref.referenceType.i == 40:
+                if ref.isForward == True:
+                    return self.nodes[ref.target]
+        return None
+
+    def getVariableTypeSupertypeNode(self, node):
+        if node is None:
+            return None
+        if node.nodeClass != NODE_CLASS_VARIABLETYPE:
+            return None
+        for ref in node.references:
+            if ref.referenceType.i == 45:
+                if ref.isForward == False:
+                    return self.nodes[ref.target]
+        return None
+
     def getDataTypeNode(self, dataType):
         if isinstance(dataType, six.string_types):
             if not valueIsInternalType(dataType):
