@@ -1373,6 +1373,44 @@ __UA_Server_write(UA_Server *server, const UA_NodeId *nodeId,
     return UA_Server_write(server, &wvalue);
 }
 
+#ifdef UA_ENABLE_HISTORIZING
+
+#include "ua_plugin_history_read_service.h"
+
+void
+Service_HistoryRead(UA_Server *server,
+                    UA_Session *session,
+                    const UA_HistoryReadRequest *request,
+                    UA_HistoryReadResponse *response) {
+    UA_HistoryReadResponse_init(response);
+    if (request->historyReadDetails.encoding != UA_EXTENSIONOBJECT_DECODED) {
+        response->responseHeader.serviceResult = UA_STATUSCODE_BADNOTSUPPORTED;
+        return;
+    }
+    if (request->historyReadDetails.content.decoded.type == &UA_TYPES[UA_TYPES_READRAWMODIFIEDDETAILS]) {
+        UA_ReadRawModifiedDetails * details = (UA_ReadRawModifiedDetails*)request->historyReadDetails.content.decoded.data;
+        if (details->isReadModified) {
+            response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+            return;
+        } else {
+            if (server->config.historyReadService.read_raw) {
+                server->config.historyReadService.read_raw(server,
+                                                           &session->sessionId,
+                                                           session->sessionHandle,
+                                                           request,
+                                                           details,
+                                                           response);
+                return;
+            }
+            response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+            return;
+        }
+    }
+    response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+    return;
+}
+#endif
+
 UA_StatusCode UA_EXPORT
 UA_Server_writeObjectProperty(UA_Server *server, const UA_NodeId objectId,
                               const UA_QualifiedName propertyName,

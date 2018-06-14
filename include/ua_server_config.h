@@ -26,6 +26,10 @@ extern "C" {
 #include "ua_plugin_pubsub.h"
 #endif
 
+#ifdef UA_ENABLE_HISTORIZING
+#include "ua_plugin_history_read_service.h"
+#endif
+
 /**
  * .. _server-configuration:
  *
@@ -164,6 +168,10 @@ struct UA_ServerConfig {
      * ervery 10 seconds. The server will still be removed depending on the
      * state of the semaphore file. */
     UA_UInt32 discoveryCleanupTimeout;
+#endif
+
+#ifdef UA_ENABLE_HISTORIZING
+    UA_HistoryReadService historyReadService;
 #endif
 };
 
