@@ -18,7 +18,6 @@ extern "C" {
 #include "ua_server.h"
 #include "ua_plugin_log.h"
 #include "ua_plugin_network.h"
-#include "ua_plugin_historical_access.h"
 #include "ua_plugin_access_control.h"
 #include "ua_plugin_pki.h"
 #include "ua_plugin_securitypolicy.h"
@@ -26,6 +25,10 @@ extern "C" {
 
 #ifdef UA_ENABLE_PUBSUB
 #include "ua_plugin_pubsub.h"
+#endif
+
+#ifdef UA_ENABLE_HISTORIZING
+    #include "ua_plugin_historical_access.h"
 #endif
 
 /**
@@ -168,6 +171,7 @@ struct UA_ServerConfig {
     UA_UInt32 discoveryCleanupTimeout;
 #endif
 
+
     /* Monitored Items Callback */
 #ifdef UA_ENABLE_SUBSCRIPTIONS
     /* Triggered, if the the node gets (un)monitored by a subscription.
@@ -186,6 +190,10 @@ struct UA_ServerConfig {
                                           const UA_NodeId *sessionId, void *sessionContext,
                                           const UA_NodeId *nodeId, void *nodeContext,
                                           const UA_UInt32 attibuteId, const UA_Boolean removed);
+#endif
+
+#ifdef UA_ENABLE_HISTORIZING
+    UA_HistoricalAccess historyAccessPlugin;
 #endif
 };
 

@@ -1,4 +1,4 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
+﻿/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. 
  *
@@ -1372,6 +1372,47 @@ __UA_Server_write(UA_Server *server, const UA_NodeId *nodeId,
     }
     return UA_Server_write(server, &wvalue);
 }
+
+#ifdef UA_ENABLE_HISTORIZING
+
+void
+Service_HistoryRead(UA_Server *server,
+                    UA_Session *session,
+                    const UA_HistoryReadRequest *request,
+                    UA_HistoryReadResponse *response) {
+    UA_HistoryReadResponse_init(response);
+    if (request->historyReadDetails.encoding != UA_EXTENSIONOBJECT_DECODED) {
+        response->responseHeader.serviceResult = UA_STATUSCODE_BADNOTSUPPORTED;
+        return;
+    }
+    if (request->historyReadDetails.content.decoded.type == &UA_TYPES[UA_TYPES_READRAWMODIFIEDDETAILS]) {
+        UA_ReadRawModifiedDetails * details = (UA_ReadRawModifiedDetails*)request->historyReadDetails.content.decoded.data;
+        if (details->isReadModified) {
+            response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+            return;
+        } else {
+            if (server->config.historyAccessPlugin.historyRead_raw) {
+                server->config.historyAccessPlugin.historyRead_raw(server,
+                                                                   server->config.historyAccessPlugin.context,
+                                                                   &session->sessionId,
+                                                                   session->sessionHandle,
+                                                                   details, 
+                                                                   request->nodesToRead,
+                                                                   request->timestampsToReturn,
+                                                                   request->releaseContinuationPoints,
+                                                                   NULL,  // outContinuationPoint
+                                                                   (UA_HistoryData*)response->results->historyData.content.decoded.data); // outHistoryData
+
+                return;
+            }
+            response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+            return;
+        }
+    }
+    response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+    return;
+}
+#endif
 
 UA_StatusCode UA_EXPORT
 UA_Server_writeObjectProperty(UA_Server *server, const UA_NodeId objectId,
