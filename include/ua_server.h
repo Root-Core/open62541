@@ -429,6 +429,19 @@ UA_BrowsePathResult UA_EXPORT
 UA_Server_translateBrowsePathToNodeIds(UA_Server *server,
                                        const UA_BrowsePath *browsePath);
 
+/* A simplified TranslateBrowsePathsToNodeIds based on the
+ * SimpleAttributeOperand type (Part 4, 7.4.4.5).
+ *
+ * This specifies a relative path using a list of BrowseNames instead of the
+ * RelativePath structure. The list of BrowseNames is equivalent to a
+ * RelativePath that specifies forward references which are subtypes of the
+ * HierarchicalReferences ReferenceType. All Nodes followed by the browsePath
+ * shall be of the NodeClass Object or Variable. */
+UA_BrowsePathResult UA_EXPORT
+UA_Server_browseSimplifiedBrowsePath(UA_Server *server, const UA_NodeId origin,
+                                     size_t browsePathSize,
+                                     const UA_QualifiedName *browsePath);
+
 #ifndef HAVE_NODEITER_CALLBACK
 #define HAVE_NODEITER_CALLBACK
 /* Iterate over all nodes referenced by parentNodeId by calling the callback
@@ -1232,6 +1245,11 @@ UA_Server_triggerEvent(UA_Server *server, const UA_NodeId eventNodeId, const UA_
  * ----------------- */
 /* Add a new namespace to the server. Returns the index of the new namespace */
 UA_UInt16 UA_EXPORT UA_Server_addNamespace(UA_Server *server, const char* name);
+
+/* Get namespace by name from the server. */
+UA_StatusCode UA_EXPORT
+UA_Server_getNamespaceByName(UA_Server *server, const UA_String namespaceUri,
+                             size_t* foundIndex);
 
 #ifdef __cplusplus
 }
