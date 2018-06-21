@@ -301,6 +301,10 @@ createDefaultConfig(void) {
     /* conf->deleteRawCapability = UA_FALSE; */
     /* conf->deleteEventCapability = UA_FALSE; */
     /* conf->deleteAtTimeDataCapability = UA_FALSE; */
+
+    /* Monitored Items Callback */
+#ifdef UA_ENABLE_SUBSCRIPTIONS
+    /* conf->monitoredItemCallback = NULL; */
 #endif
 
     /* --> Finish setting the default static config <-- */

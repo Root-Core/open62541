@@ -98,6 +98,39 @@ outargMethod(UA_Server *server,
 
 #endif
 
+static UA_StatusCode
+monitoredHandler(UA_Server *server,
+                 const UA_NodeId *sessionId, void *sessionContext,
+                 const UA_NodeId *nodeId, void *nodeContext,
+                 const UA_UInt32 attrId, const UA_Boolean removed)
+{
+    /* This handler can help managing the DataSources, e.g. activating them (hardware), etc.. */
+
+    /* We pretend, only value attributes were relevant */
+    if (attrId != UA_ATTRIBUTEID_VALUE)
+        return UA_STATUSCODE_GOOD;
+
+    /* The nodeContext is used as counter */
+    UA_UInt32 monCount = 0;
+    UA_Server_getNodeContext(server, *nodeId, (void*)&monCount);
+    monCount += removed ? -1 : 1;
+    UA_Server_setNodeContext(server, *nodeId, (void*)monCount);
+
+    /* Check, if the node was monitored the first time or not monitored anymore */
+    if (!removed && monCount == 1) {
+        // assure the nodeid is numeric (for logging in this example)
+        if (nodeId->identifierType == UA_NODEIDTYPE_NUMERIC)
+            printf("Started monitoring Node ns=%d; id=%d\n", nodeId->namespaceIndex, nodeId->identifier.numeric);
+    }
+    else if (removed && monCount == 0) {
+        // assure the nodeid is numeric (for logging in this example)
+        if (nodeId->identifierType == UA_NODEIDTYPE_NUMERIC)
+            printf("Stopped monitoring Node ns=%d; id=%d\n", nodeId->namespaceIndex, nodeId->identifier.numeric);
+    }
+
+    return UA_STATUSCODE_GOOD;
+}
+
 int
 main(int argc, char **argv) {
     signal(SIGINT, stopHandler); /* catches ctrl-c */
@@ -152,6 +185,9 @@ main(int argc, char **argv) {
     UA_ServerConfig *config = UA_ServerConfig_new_minimal(4840, &certificate);
     UA_ByteString_deleteMembers(&certificate);
 #endif
+
+    /* Register callbacks for monitored items */
+    config->monitoredItemCallback = monitoredHandler;
 
     /* uncomment next line to add a custom hostname */
     // UA_ServerConfig_set_customHostname(config, UA_STRING("custom"));
