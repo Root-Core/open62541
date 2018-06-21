@@ -27,6 +27,10 @@ extern "C" {
 #include "ua_plugin_pubsub.h"
 #endif
 
+#ifdef UA_ENABLE_HISTORIZING
+#include "ua_plugin_historical_access.h"
+#endif
+
 /**
  * .. _server-configuration:
  *
@@ -208,6 +212,10 @@ struct UA_ServerConfig {
                                           const UA_NodeId *sessionId, void *sessionContext,
                                           const UA_NodeId *nodeId, void *nodeContext,
                                           const UA_UInt32 attibuteId, const UA_Boolean removed);
+#endif
+
+#ifdef UA_ENABLE_HISTORIZING
+    UA_HistoricalAccess historyAccessPlugin;
 #endif
 };
 
