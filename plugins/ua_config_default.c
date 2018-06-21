@@ -301,6 +301,7 @@ createDefaultConfig(void) {
     /* conf->deleteRawCapability = UA_FALSE; */
     /* conf->deleteEventCapability = UA_FALSE; */
     /* conf->deleteAtTimeDataCapability = UA_FALSE; */
+#endif
 
     /* Monitored Items Callback */
 #ifdef UA_ENABLE_SUBSCRIPTIONS
