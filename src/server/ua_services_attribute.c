@@ -1,4 +1,4 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
+﻿/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. 
  *
@@ -1391,7 +1391,15 @@ Service_HistoryRead(UA_Server *server,
             response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
             return;
         } else {
-            if (server->config.historyAccessPlugin.historyRead_raw) {
+            if (server->config.historyAccessPlugin.historyRead_raw_full) {
+                server->config.historyAccessPlugin.historyRead_raw_full(server,
+                                                                        server->config.historyAccessPlugin.context,
+                                                                        &session->sessionId,
+                                                                        session->sessionHandle,
+                                                                        request,
+                                                                        response);
+            }
+            else if (server->config.historyAccessPlugin.historyRead_raw) {
                 server->config.historyAccessPlugin.historyRead_raw(server,
                                                                    server->config.historyAccessPlugin.context,
                                                                    &session->sessionId,

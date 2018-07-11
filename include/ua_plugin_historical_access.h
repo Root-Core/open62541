@@ -56,6 +56,12 @@ typedef struct {
                        UA_ByteString *outContinuationPoint,
                        UA_HistoryData *outHistoryData);
 
+    UA_StatusCode
+    (*historyRead_raw_full)(UA_Server *server, void *haContext,
+                            const UA_NodeId *sessionId, void *sessionContext,
+                            const UA_HistoryReadRequest *req,
+                            UA_HistoryReadResponse *res);
+
     /* UA_StatusCode */
     /* (*historyRead_modified)(UA_Server *server, void *haContext, */
     /*                         const UA_NodeId *sessionId, void *sessionContext, */
