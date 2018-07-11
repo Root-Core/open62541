@@ -1391,6 +1391,9 @@ Service_HistoryRead(UA_Server *server,
             response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
             return;
         } else {
+            response->resultsSize = request->nodesToReadSize;
+            response->results = (UA_HistoryReadResult*)UA_Array_new(response->resultsSize, &UA_TYPES[UA_TYPES_HISTORYREADRESPONSE]);
+
             if (server->config.historyAccessPlugin.historyRead_raw_full) {
                 server->config.historyAccessPlugin.historyRead_raw_full(server,
                                                                         server->config.historyAccessPlugin.context,
