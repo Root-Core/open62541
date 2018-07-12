@@ -1,4 +1,4 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
+﻿/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. 
  *
@@ -1391,11 +1391,13 @@ Service_HistoryRead(UA_Server *server,
             response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
             return;
         } else {
+            UA_StatusCode status = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+
             response->resultsSize = request->nodesToReadSize;
             response->results = (UA_HistoryReadResult*)UA_Array_new(response->resultsSize, &UA_TYPES[UA_TYPES_HISTORYREADRESPONSE]);
 
             if (server->config.historyAccessPlugin.historyRead_raw_full) {
-                server->config.historyAccessPlugin.historyRead_raw_full(server,
+                status = server->config.historyAccessPlugin.historyRead_raw_full(server,
                                                                         server->config.historyAccessPlugin.context,
                                                                         &session->sessionId,
                                                                         session->sessionHandle,
@@ -1403,7 +1405,7 @@ Service_HistoryRead(UA_Server *server,
                                                                         response);
             }
             else if (server->config.historyAccessPlugin.historyRead_raw) {
-                server->config.historyAccessPlugin.historyRead_raw(server,
+                status = server->config.historyAccessPlugin.historyRead_raw(server,
                                                                    server->config.historyAccessPlugin.context,
                                                                    &session->sessionId,
                                                                    session->sessionHandle,
@@ -1416,7 +1418,7 @@ Service_HistoryRead(UA_Server *server,
 
                 return;
             }
-            response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+            response->responseHeader.serviceResult = status;
             return;
         }
     }
