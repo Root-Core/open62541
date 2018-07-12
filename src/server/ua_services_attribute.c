@@ -1391,13 +1391,13 @@ Service_HistoryRead(UA_Server *server,
             response->responseHeader.serviceResult = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
             return;
         } else {
-            UA_StatusCode status = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+            UA_StatusCode retval = UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
 
             response->resultsSize = request->nodesToReadSize;
             response->results = (UA_HistoryReadResult*)UA_Array_new(response->resultsSize, &UA_TYPES[UA_TYPES_HISTORYREADRESPONSE]);
 
             if (server->config.historyAccessPlugin.historyRead_raw_full) {
-                status = server->config.historyAccessPlugin.historyRead_raw_full(server,
+                retval = server->config.historyAccessPlugin.historyRead_raw_full(server,
                                                                         server->config.historyAccessPlugin.context,
                                                                         &session->sessionId,
                                                                         session->sessionHandle,
@@ -1405,7 +1405,7 @@ Service_HistoryRead(UA_Server *server,
                                                                         response);
             }
             else if (server->config.historyAccessPlugin.historyRead_raw) {
-                status = server->config.historyAccessPlugin.historyRead_raw(server,
+                retval = server->config.historyAccessPlugin.historyRead_raw(server,
                                                                    server->config.historyAccessPlugin.context,
                                                                    &session->sessionId,
                                                                    session->sessionHandle,
@@ -1418,7 +1418,7 @@ Service_HistoryRead(UA_Server *server,
 
                 return;
             }
-            response->responseHeader.serviceResult = status;
+            response->responseHeader.serviceResult = retval;
             return;
         }
     }
