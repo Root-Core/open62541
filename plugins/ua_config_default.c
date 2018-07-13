@@ -650,6 +650,10 @@ UA_ServerConfig_delete(UA_ServerConfig *config) {
     /* Access Control */
     config->accessControl.deleteMembers(&config->accessControl);
 
+    /* Historical Data */
+    if (config->historyAccessPlugin.deleteMembers)
+        config->historyAccessPlugin.deleteMembers(&config->historyAccessPlugin);
+
     UA_free(config);
 }
 
