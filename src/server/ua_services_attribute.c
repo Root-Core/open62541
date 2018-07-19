@@ -1380,7 +1380,7 @@ Service_HistoryRead(UA_Server *server,
                     UA_Session *session,
                     const UA_HistoryReadRequest *request,
                     UA_HistoryReadResponse *response) {
-    UA_HistoryReadResponse_init(response);
+
     if (request->historyReadDetails.encoding != UA_EXTENSIONOBJECT_DECODED) {
         response->responseHeader.serviceResult = UA_STATUSCODE_BADNOTSUPPORTED;
         return;
