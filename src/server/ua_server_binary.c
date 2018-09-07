@@ -220,14 +220,6 @@ getServicePointers(UA_UInt32 requestTypeId, const UA_DataType **requestType,
         *responseType = &UA_TYPES[UA_TYPES_SETMONITORINGMODERESPONSE];
         break;
 #endif
-#ifdef UA_ENABLE_HISTORIZING
-        /* For History read */
-    case UA_NS0ID_HISTORYREADREQUEST_ENCODING_DEFAULTBINARY:
-        *service = (UA_Service)Service_HistoryRead;
-        *requestType = &UA_TYPES[UA_TYPES_HISTORYREADREQUEST];
-        *responseType = &UA_TYPES[UA_TYPES_HISTORYREADRESPONSE];
-        break;
-#endif
 
 #ifdef UA_ENABLE_HISTORIZING
         // For History read

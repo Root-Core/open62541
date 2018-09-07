@@ -128,23 +128,30 @@ monitoredHandler(UA_Server *server,
     return UA_STATUSCODE_GOOD;
 }
 
-UA_StatusCode
-historicalRead(UA_Server *server, void *haContext,
-               const UA_NodeId *sessionId, void *sessionContext,
-               const UA_HistoryReadRequest *req,
-               UA_HistoryReadResponse *res)
+void
+historicalRead(UA_Server *server,
+               void *hdbContext,
+               const UA_NodeId *sessionId,
+               void *sessionContext,
+               const UA_RequestHeader *requestHeader,
+               const UA_ReadRawModifiedDetails *historyReadDetails,
+               UA_TimestampsToReturn timestampsToReturn,
+               UA_Boolean releaseContinuationPoints,
+               size_t nodesToReadSize,
+               const UA_HistoryReadValueId *nodesToRead,
+               UA_HistoryReadResponse *response,
+               UA_HistoryData * const * const historyData)
 {
     printf("\nHistorical read\n");
 
-    for (size_t i = 0; i < req->nodesToReadSize; ++i)
+    for (size_t i = 0; i < nodesToReadSize; ++i)
     {
-        UA_HistoryReadValueId node = req->nodesToRead[i];
-        UA_HistoryReadResult* results = (UA_HistoryReadResult*)res->results->historyData.content.decoded.data;
+        UA_HistoryReadValueId node = nodesToRead[i];
 
         if (UA_ByteString_equal(&node.continuationPoint, &UA_BYTESTRING_NULL)) {
             printf("Initial request\n");
 
-            UA_DataValue* dv = UA_DataValue_new();
+            /*UA_DataValue* dv = historyData->dataValues[0];
             dv->hasStatus = true;
             dv->status = UA_STATUSCODE_GOOD;
 
@@ -155,20 +162,12 @@ historicalRead(UA_Server *server, void *haContext,
             dv->hasValue = true;
             UA_Variant_setScalarCopy(&dv->value, &val, &UA_TYPES[UA_TYPES_FLOAT]);
 
-            UA_HistoryData* hd = UA_HistoryData_new();
-            hd->dataValuesSize = 1;
-            hd->dataValues = dv;
-
-            results[i].historyData.encoding = UA_EXTENSIONOBJECT_DECODED;
-            results[i].historyData.content.decoded.type = &UA_TYPES[UA_TYPES_HISTORYDATA];
-            results[i].historyData.content.decoded.data = &hd;
+            historyData->dataValuesSize = 1;*/
         }
         else {
             printf("Subsequent request\n");
         }
     }
-
-    return UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
 }
 
 static void
@@ -562,11 +561,11 @@ int main(int argc, char **argv) {
     config->monitoredItemCallback = monitoredHandler;
 
 #ifdef UA_ENABLE_HISTORIZING
-    UA_HistoricalAccess ha;
+    UA_HistoryDatabase ha;
     memset(&ha, 0, sizeof(ha));
-    ha.historyRead_raw_full = historicalRead;
+    ha.readRaw = historicalRead;
 
-    config->historyAccessPlugin = ha;
+    config->historyDatabase = ha;
 #endif
 
     UA_Server *server = UA_Server_new(config);
