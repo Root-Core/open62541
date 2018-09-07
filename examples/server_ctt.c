@@ -128,6 +128,49 @@ monitoredHandler(UA_Server *server,
     return UA_STATUSCODE_GOOD;
 }
 
+UA_StatusCode
+historicalRead(UA_Server *server, void *haContext,
+               const UA_NodeId *sessionId, void *sessionContext,
+               const UA_HistoryReadRequest *req,
+               UA_HistoryReadResponse *res)
+{
+    printf("\nHistorical read\n");
+
+    for (size_t i = 0; i < req->nodesToReadSize; ++i)
+    {
+        UA_HistoryReadValueId node = req->nodesToRead[i];
+        UA_HistoryReadResult* results = (UA_HistoryReadResult*)res->results->historyData.content.decoded.data;
+
+        if (UA_ByteString_equal(&node.continuationPoint, &UA_BYTESTRING_NULL)) {
+            printf("Initial request\n");
+
+            UA_DataValue* dv = UA_DataValue_new();
+            dv->hasStatus = true;
+            dv->status = UA_STATUSCODE_GOOD;
+
+            dv->hasSourceTimestamp = true;
+            dv->sourceTimestamp = UA_DateTime_now();
+
+            UA_Float val = 42.1337f;
+            dv->hasValue = true;
+            UA_Variant_setScalarCopy(&dv->value, &val, &UA_TYPES[UA_TYPES_FLOAT]);
+
+            UA_HistoryData* hd = UA_HistoryData_new();
+            hd->dataValuesSize = 1;
+            hd->dataValues = dv;
+
+            results[i].historyData.encoding = UA_EXTENSIONOBJECT_DECODED;
+            results[i].historyData.content.decoded.type = &UA_TYPES[UA_TYPES_HISTORYDATA];
+            results[i].historyData.content.decoded.data = &hd;
+        }
+        else {
+            printf("Subsequent request\n");
+        }
+    }
+
+    return UA_STATUSCODE_BADHISTORYOPERATIONUNSUPPORTED;
+}
+
 static void
 setInformationModel(UA_Server *server) {
     /* add a static variable node to the server */
@@ -518,11 +561,38 @@ int main(int argc, char **argv) {
     /* Register callbacks for monitored items */
     config->monitoredItemCallback = monitoredHandler;
 
+#ifdef UA_ENABLE_HISTORIZING
+    UA_HistoricalAccess ha;
+    memset(&ha, 0, sizeof(ha));
+    ha.historyRead_raw_full = historicalRead;
+
+    config->historyAccessPlugin = ha;
+#endif
+
     UA_Server *server = UA_Server_new(config);
     if(server == NULL)
         return 1;
 
     setInformationModel(server);
+
+
+#ifdef UA_ENABLE_HISTORIZING
+    UA_VariableAttributes hist_attr = UA_VariableAttributes_default;
+    hist_attr.description = UA_LOCALIZEDTEXT("en-US", "historical");
+    hist_attr.displayName = UA_LOCALIZEDTEXT("en-US", "historical");
+    hist_attr.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_HISTORYREAD;
+    hist_attr.historizing = true;
+
+    UA_Float hist_val = 42.1337f;
+    UA_Variant_setScalarCopy(&hist_attr.value, &hist_val, &UA_TYPES[UA_TYPES_FLOAT]);
+    hist_attr.dataType = UA_TYPES[UA_TYPES_FLOAT].typeId;
+    hist_attr.valueRank = -1;
+
+    const UA_QualifiedName hist_qual_name = UA_QUALIFIEDNAME(1, "current time");
+    UA_Server_addVariableNode(server, UA_NODEID_NUMERIC(1, 421337), UA_NODEID_NUMERIC(0, UA_NS0ID_OBJECTSFOLDER),
+        UA_NODEID_NUMERIC(0, UA_NS0ID_ORGANIZES), hist_qual_name,
+        baseDataVariableType, hist_attr, NULL, NULL);
+#endif
 
     /* run server */
     UA_StatusCode retval = UA_Server_run(server, &running);
