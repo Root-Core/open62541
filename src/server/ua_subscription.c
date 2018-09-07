@@ -1,4 +1,4 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
+﻿/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
@@ -14,6 +14,7 @@
  *    Copyright 2017 (c) Ari Breitkreuz, fortiss GmbH
  *    Copyright 2017 (c) Mattias Bornhager
  *    Copyright 2018 (c) Fabian Arndt, Root-Core
+ *    Copyright 2018 (c) Hilscher Gesellschaft für Systemautomation mbH (Author: Martin Lang)
  */
 
 #include "ua_server_internal.h"
@@ -41,7 +42,7 @@ UA_Notification_enqueue(UA_Server *server, UA_Subscription *sub,
 
     /* Ensure enough space is available in the MonitoredItem. Do this only after
      * adding the new Notification. */
-    MonitoredItem_ensureQueueSpace(server, mon);
+    UA_MonitoredItem_ensureQueueSpace(server, mon);
 }
 
 void
@@ -50,11 +51,13 @@ UA_Notification_delete(UA_Subscription *sub, UA_MonitoredItem *mon,
     if(mon->monitoredItemType == UA_MONITOREDITEMTYPE_CHANGENOTIFY) {
         UA_DataValue_deleteMembers(&n->data.value);
         --sub->dataChangeNotifications;
+#ifdef UA_ENABLE_SUBSCRIPTIONS_EVENTS
     } else if(mon->monitoredItemType == UA_MONITOREDITEMTYPE_EVENTNOTIFY) {
         UA_EventFieldList_deleteMembers(&n->data.event.fields);
         /* EventFilterResult currently isn't being used
          * UA_EventFilterResult_delete(notification->data.event->result); */
         --sub->eventNotifications;
+#endif
     } else if(mon->monitoredItemType == UA_MONITOREDITEMTYPE_STATUSNOTIFY) {
         --sub->statusChangeNotifications;
     }
@@ -80,6 +83,9 @@ UA_Subscription_new(UA_Session *session, UA_UInt32 subscriptionId) {
     newSub->session = session;
     newSub->subscriptionId = subscriptionId;
     newSub->state = UA_SUBSCRIPTIONSTATE_NORMAL; /* The first publish response is sent immediately */
+    /* Even if the first publish response is a keepalive the sequence number is 1.
+     * This can happen by a subscription without a monitored item (see CTT test scripts). */
+    newSub->nextSequenceNumber = 1;
     TAILQ_INIT(&newSub->retransmissionQueue);
     TAILQ_INIT(&newSub->notificationQueue);
     return newSub;
@@ -174,7 +180,7 @@ UA_Subscription_addRetransmissionMessage(UA_Server *server, UA_Subscription *sub
     }
 
     /* Add entry */
-    TAILQ_INSERT_HEAD(&sub->retransmissionQueue, entry, listEntry);
+    TAILQ_INSERT_TAIL(&sub->retransmissionQueue, entry, listEntry);
     ++sub->retransmissionQueueSize;
 }
 
@@ -307,23 +313,11 @@ prepareNotificationMessage(UA_Server *server, UA_Subscription *sub,
         } else if(mon->monitoredItemType == UA_MONITOREDITEMTYPE_EVENTNOTIFY && enl) {
             UA_assert(enl != NULL); /* Have at least one event notification */
 
-            /* TODO: The following lead to crashes when we assumed notifications to be ready... */
-            /* /\* removing an overflowEvent should not reduce the queueSize *\/ */
-            /* UA_NodeId overflowId = UA_NODEID_NUMERIC(0, UA_NS0ID_SIMPLEOVERFLOWEVENTTYPE); */
-            /* if (!(notification->data.event.fields.eventFieldsSize == 1 */
-            /*       && notification->data.event.fields.eventFields->type == &UA_TYPES[UA_TYPES_NODEID] */
-            /*       && UA_NodeId_equal((UA_NodeId *)notification->data.event.fields.eventFields->data, &overflowId))) { */
-            /*     --mon->queueSize; */
-            /*     --sub->notificationQueueSize; */
-            /* } */
-
             /* Move the content to the response */
             UA_EventFieldList *efl = &enl->events[enlPos];
             *efl = notification->data.event.fields;
             UA_EventFieldList_init(&notification->data.event.fields);
             efl->clientHandle = mon->clientHandle;
-            /* EventFilterResult currently isn't being used
-               UA_EventFilterResult_deleteMembers(&notification->data.event.result); */
             enlPos++;
         }
 #endif
@@ -479,19 +473,20 @@ UA_Subscription_publish(UA_Server *server, UA_Subscription *sub) {
     response->moreNotifications = moreNotifications;
     message->publishTime = response->responseHeader.timestamp;
 
-    /* Set the sequence number. The sequence number will be reused if there are
-     * no notifications (and this is a keepalive message). */
-    message->sequenceNumber = UA_Subscription_nextSequenceNumber(sub->sequenceNumber);
+    /* Set sequence number to message. Started at 1 which is given
+     * during creating a new subscription. The 1 is required for
+     * initial publish response with or without an monitored item. */
+    message->sequenceNumber = sub->nextSequenceNumber;
 
     if(notifications > 0) {
-        /* There are notifications. So we can't reuse the sequence number. */
-        sub->sequenceNumber = message->sequenceNumber;
-
         /* Put the notification message into the retransmission queue. This
          * needs to be done here, so that the message itself is included in the
          * available sequence numbers for acknowledgement. */
         retransmission->message = response->notificationMessage;
         UA_Subscription_addRetransmissionMessage(server, sub, retransmission);
+        /* Only if a notification was created, the sequence number must be increased.
+         * For a keepalive the sequence number can be reused. */
+        sub->nextSequenceNumber = UA_Subscription_nextSequenceNumber(sub->nextSequenceNumber);
     }
 
     /* Get the available sequence numbers from the retransmission queue */

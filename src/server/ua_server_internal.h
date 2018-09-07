@@ -1,6 +1,6 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
+﻿/* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. 
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
  *    Copyright 2014-2017 (c) Fraunhofer IOSB (Author: Julius Pfrommer)
  *    Copyright 2014, 2017 (c) Florian Palm
@@ -18,7 +18,7 @@
 extern "C" {
 #endif
 
-#include "ua_util.h"
+#include "ua_util_internal.h"
 #include "ua_server.h"
 #include "ua_server_config.h"
 #include "ua_timer.h"
@@ -92,6 +92,18 @@ typedef struct serverOnNetwork_hash_entry {
     struct serverOnNetwork_hash_entry* next;
 } serverOnNetwork_hash_entry;
 
+typedef struct mdnsHostnameToIp_list_entry {
+    LIST_ENTRY(mdnsHostnameToIp_list_entry) pointers;
+    UA_String mdnsHostname;
+    struct in_addr addr;
+} mdnsHostnameToIp_list_entry;
+
+#define MDNS_HOSTNAME_TO_IP_HASH_PRIME 1009
+typedef struct mdnsHostnameToIp_hash_entry {
+    mdnsHostnameToIp_list_entry* entry;
+    struct mdnsHostnameToIp_hash_entry* next;
+} mdnsHostnameToIp_hash_entry;
+
 #endif /* UA_ENABLE_DISCOVERY_MULTICAST */
 #endif /* UA_ENABLE_DISCOVERY */
 
@@ -102,6 +114,9 @@ struct UA_Server {
     /* Security */
     UA_SecureChannelManager secureChannelManager;
     UA_SessionManager sessionManager;
+    UA_Session adminSession; /* Local access to the services (for startup and
+                              * maintenance) uses this Session with all possible
+                              * access rights (Session Id: 1) */
 
 #ifdef UA_ENABLE_DISCOVERY
     /* Discovery */
@@ -112,11 +127,7 @@ struct UA_Server {
     void* registerServerCallbackData;
 # ifdef UA_ENABLE_DISCOVERY_MULTICAST
     mdns_daemon_t *mdnsDaemon;
-#ifdef _WIN32
-    SOCKET mdnsSocket;
-#else
-    int mdnsSocket;
-#endif
+    UA_SOCKET mdnsSocket;
     UA_Boolean mdnsMainSrvAdded;
 #  ifdef UA_ENABLE_MULTITHREADING
     pthread_t mdnsThread;
@@ -132,6 +143,11 @@ struct UA_Server {
 
     UA_Server_serverOnNetworkCallback serverOnNetworkCallback;
     void* serverOnNetworkCallbackData;
+
+
+    LIST_HEAD(mdnsHostnameToIp_list, mdnsHostnameToIp_list_entry) mdnsHostnameToIp; // doubly-linked list of hostname to IP mapping (from mDNS)
+    // hash mapping hostname to ip
+    struct mdnsHostnameToIp_hash_entry* mdnsHostnameToIpHash[MDNS_HOSTNAME_TO_IP_HASH_PRIME];
 
 # endif
 #endif
@@ -202,8 +218,11 @@ struct UA_Server {
 #define UA_Nodestore_remove(SERVER, NODEID)                             \
     (SERVER)->config.nodestore.removeNode((SERVER)->config.nodestore.context, NODEID)
 
-#define UA_Nodestore_iterate(SERVER, HANDLE, CALLBACK)                  \
-    (SERVER)->config.nodestore.iterate((SERVER)->config.nodestore.context, HANDLE, CALLBACK)
+/* Deletes references from the node which are not matching any type in the given
+ * array. Could be used to e.g. delete all the references, except
+ * 'HASMODELINGRULE' */
+void UA_Node_deleteReferencesSubset(UA_Node *node, size_t referencesSkipSize,
+                                    UA_NodeId* referencesSkip);
 
 /* Calls the callback with the node retrieved from the nodestore on top of the
  * stack. Either a copy or the original node for in-situ editing. Depends on
@@ -260,16 +279,35 @@ isNodeInTree(UA_Nodestore *ns, const UA_NodeId *leafNode,
              size_t referenceTypeIdsSize);
 
 /* Returns an array with the hierarchy of type nodes. The returned array starts
- * at the leaf and continues "upwards" in the hierarchy based on the
+ * at the leaf and continues "upwards" or "downwards" in the hierarchy based on the
  * ``hasSubType`` references. Since multiple-inheritance is possible in general,
- * duplicate entries are removed. */
+ * duplicate entries are removed.
+ * The parameter `walkDownwards` indicates the direction of search.
+ * If set to TRUE it will get all the subtypes of the given
+ * leafType (including leafType).
+ * If set to FALSE it will get all the parent types of the given
+ * leafType (including leafType)*/
 UA_StatusCode
 getTypeHierarchy(UA_Nodestore *ns, const UA_NodeId *leafType,
-                 UA_NodeId **typeHierarchy, size_t *typeHierarchySize);
+                 UA_NodeId **typeHierarchy, size_t *typeHierarchySize,
+                 UA_Boolean walkDownwards);
+
+/* Same as getTypeHierarchy but takes multiple leafTypes as parameter and returns
+ * an combined list of all the found types for all the leaf types */
+UA_StatusCode
+getTypesHierarchy(UA_Nodestore *ns, const UA_NodeId *leafType, size_t leafTypeSize,
+                 UA_NodeId **typeHierarchy, size_t *typeHierarchySize,
+                 UA_Boolean walkDownwards);
 
 /* Returns the type node from the node on the stack top. The type node is pushed
  * on the stack and returned. */
 const UA_Node * getNodeType(UA_Server *server, const UA_Node *node);
+
+/* Write a node attribute with a defined session */
+UA_StatusCode
+UA_Server_writeWithSession(UA_Server *server, UA_Session *session,
+                           const UA_WriteValue *value);
+
 
 /* Many services come as an array of operations. This function generalizes the
  * processing of the operations. */
@@ -292,6 +330,14 @@ UA_Server_processServiceOperations(UA_Server *server, UA_Session *session,
 /* Check Information Model Consistency */
 /***************************************/
 
+/* Read a node attribute in the context of a "checked-out" node. So the
+ * attribute will not be copied when possible. The variant then points into the
+ * node and has UA_VARIANT_DATA_NODELETE set. */
+void
+ReadWithNode(const UA_Node *node, UA_Server *server, UA_Session *session,
+             UA_TimestampsToReturn timestampsToReturn,
+             const UA_ReadValueId *id, UA_DataValue *v);
+
 UA_StatusCode
 readValueAttribute(UA_Server *server, UA_Session *session,
                    const UA_VariableNode *vn, UA_DataValue *v);
@@ -304,7 +350,7 @@ readValueAttribute(UA_Server *server, UA_Session *session,
  * byte array to bytestring or uint32 to some enum. If editableValue is non-NULL,
  * we try to create a matching variant that points to the original data. */
 UA_Boolean
-compatibleValue(UA_Server *server, const UA_NodeId *targetDataTypeId,
+compatibleValue(UA_Server *server, UA_Session *session, const UA_NodeId *targetDataTypeId,
                 UA_Int32 targetValueRank, size_t targetArrayDimensionsSize,
                 const UA_UInt32 *targetArrayDimensions, const UA_Variant *value,
                 const UA_NumericRange *range);
@@ -320,7 +366,8 @@ compatibleValueArrayDimensions(const UA_Variant *value, size_t targetArrayDimens
                                const UA_UInt32 *targetArrayDimensions);
 
 UA_Boolean
-compatibleValueRankArrayDimensions(UA_Int32 valueRank, size_t arrayDimensionsSize);
+compatibleValueRankArrayDimensions(UA_Server *server, UA_Session *session,
+                                   UA_Int32 valueRank, size_t arrayDimensionsSize);
 
 UA_Boolean
 compatibleDataType(UA_Server *server, const UA_NodeId *dataType,
@@ -385,15 +432,18 @@ UA_Discovery_removeRecord(UA_Server *server, const UA_String *servername,
 
 /* Creates a new node in the nodestore. */
 UA_StatusCode
-Operation_addNode_begin(UA_Server *server, UA_Session *session, void *nodeContext,
-                        const UA_AddNodesItem *item, const UA_NodeId *parentNodeId,
-                        const UA_NodeId *referenceTypeId,
-                        UA_NodeId *outNewNodeId);
+AddNode_raw(UA_Server *server, UA_Session *session, void *nodeContext,
+            const UA_AddNodesItem *item, UA_NodeId *outNewNodeId);
 
-/* Children, references, type-checking, constructors. */
+/* Check the reference to the parent node; Add references. */
 UA_StatusCode
-Operation_addNode_finish(UA_Server *server, UA_Session *session,
-                         const UA_NodeId *nodeId);
+AddNode_addRefs(UA_Server *server, UA_Session *session, const UA_NodeId *nodeId,
+                const UA_NodeId *parentNodeId, const UA_NodeId *referenceTypeId,
+                const UA_NodeId *typeDefinitionId);
+
+/* Type-check type-definition; Run the constructors */
+UA_StatusCode
+AddNode_finish(UA_Server *server, UA_Session *session, const UA_NodeId *nodeId);
 
 /**********************/
 /* Create Namespace 0 */

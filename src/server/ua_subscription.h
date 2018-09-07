@@ -14,10 +14,12 @@
 #ifndef UA_SUBSCRIPTION_H_
 #define UA_SUBSCRIPTION_H_
 
-#include "ua_util.h"
+#include "ua_util_internal.h"
 #include "ua_types.h"
 #include "ua_types_generated.h"
 #include "ua_session.h"
+
+#ifdef UA_ENABLE_SUBSCRIPTIONS
 
 /**
  * MonitoredItems create Notifications. Subscriptions collect Notifications from
@@ -44,11 +46,13 @@ typedef enum {
 struct UA_MonitoredItem;
 typedef struct UA_MonitoredItem UA_MonitoredItem;
 
+#ifdef UA_ENABLE_SUBSCRIPTIONS_EVENTS
 typedef struct UA_EventNotification {
     UA_EventFieldList fields;
     /* EventFilterResult currently isn't being used
     UA_EventFilterResult result; */
 } UA_EventNotification;
+#endif
 
 typedef struct UA_Notification {
     TAILQ_ENTRY(UA_Notification) listEntry; /* Notification list for the MonitoredItem */
@@ -58,7 +62,9 @@ typedef struct UA_Notification {
 
     /* See the monitoredItemType of the MonitoredItem */
     union {
+#ifdef UA_ENABLE_SUBSCRIPTIONS_EVENTS
         UA_EventNotification event;
+#endif
         UA_DataValue value;
     } data;
 } UA_Notification;
@@ -79,6 +85,8 @@ struct UA_MonitoredItem {
     UA_Subscription *subscription;
     UA_UInt32 monitoredItemId;
     UA_UInt32 clientHandle;
+    UA_Boolean registered; /* Was the MonitoredItem registered in Userland with
+                              the callback? */
 
     /* Settings */
     UA_MonitoredItemType monitoredItemType;
@@ -92,7 +100,9 @@ struct UA_MonitoredItem {
     UA_Boolean discardOldest;
     // TODO: dataEncoding is hardcoded to UA binary
     union {
+#ifdef UA_ENABLE_SUBSCRIPTIONS_EVENTS
         UA_EventFilter eventFilter;
+#endif
         UA_DataChangeFilter dataChangeFilter;
     } filter;
     UA_Variant lastValue;
@@ -105,6 +115,8 @@ struct UA_MonitoredItem {
     /* Notification Queue */
     NotificationQueue queue;
     UA_UInt32 queueSize;
+     /* Save the amount of OverflowEvents in a separate counter */
+     UA_UInt32 eventOverflows;
 #ifdef UA_ENABLE_SUBSCRIPTIONS_EVENTS
     UA_MonitoredItem *next;
 #endif
@@ -118,7 +130,10 @@ UA_StatusCode UA_MonitoredItem_unregisterSampleCallback(UA_Server *server, UA_Mo
 
 /* Remove entries until mon->maxQueueSize is reached. Sets infobits for lost
  * data if required. */
-UA_StatusCode MonitoredItem_ensureQueueSpace(UA_Server *server, UA_MonitoredItem *mon);
+UA_StatusCode UA_MonitoredItem_ensureQueueSpace(UA_Server *server, UA_MonitoredItem *mon);
+
+UA_StatusCode UA_MonitoredItem_removeNodeEventCallback(UA_Server *server, UA_Session *session,
+                                                       UA_Node *node, void *data);
 
 /****************/
 /* Subscription */
@@ -155,7 +170,7 @@ struct UA_Subscription {
 
     /* Runtime information */
     UA_SubscriptionState state;
-    UA_UInt32 sequenceNumber;
+    UA_UInt32 nextSequenceNumber;
     UA_UInt32 currentKeepAliveCount;
     UA_UInt32 currentLifetimeCount;
 
@@ -198,8 +213,11 @@ UA_Subscription_deleteMonitoredItem(UA_Server *server, UA_Subscription *sub,
                                     UA_UInt32 monitoredItemId);
 
 void UA_Subscription_publish(UA_Server *server, UA_Subscription *sub);
-UA_StatusCode UA_Subscription_removeRetransmissionMessage(UA_Subscription *sub, UA_UInt32 sequenceNumber);
+UA_StatusCode UA_Subscription_removeRetransmissionMessage(UA_Subscription *sub,
+                                                          UA_UInt32 sequenceNumber);
 void UA_Subscription_answerPublishRequestsNoSubscription(UA_Server *server, UA_Session *session);
 UA_Boolean UA_Subscription_reachedPublishReqLimit(UA_Server *server,  UA_Session *session);
+
+#endif /* UA_ENABLE_SUBSCRIPTIONS */
 
 #endif /* UA_SUBSCRIPTION_H_ */

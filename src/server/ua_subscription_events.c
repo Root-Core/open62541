@@ -10,6 +10,32 @@
 
 #ifdef UA_ENABLE_SUBSCRIPTIONS_EVENTS
 
+UA_StatusCode
+UA_MonitoredItem_removeNodeEventCallback(UA_Server *server, UA_Session *session,
+                                         UA_Node *node, void *data) {
+    /* data is the monitoredItemID */
+    /* catch edge case that it's the first element */
+    if (data == ((UA_ObjectNode *) node)->monitoredItemQueue) {
+        ((UA_ObjectNode *)node)->monitoredItemQueue = ((UA_MonitoredItem *)data)->next;
+        return UA_STATUSCODE_GOOD;
+    }
+
+    /* SLIST_FOREACH */
+    for (UA_MonitoredItem *entry = ((UA_ObjectNode *) node)->monitoredItemQueue->next;
+         entry != NULL; entry=entry->next) {
+        if (entry == (UA_MonitoredItem *)data) {
+            /* SLIST_REMOVE */
+            UA_MonitoredItem *iter = ((UA_ObjectNode *) node)->monitoredItemQueue;
+            for (; iter->next != entry; iter=iter->next) {}
+            iter->next = entry->next;
+            /* Unlike SLIST_REMOVE, do not free the entry, since it
+             * is still being worked on in the calling function */
+            break;
+        }
+    }
+    return UA_STATUSCODE_GOOD;
+}
+
 typedef struct Events_nodeListElement {
     LIST_ENTRY(Events_nodeListElement) listEntry;
     UA_NodeId nodeId;
@@ -365,7 +391,7 @@ UA_Event_addEventToMonitoredItem(UA_Server *server, const UA_NodeId *event,
 }
 
 static const UA_NodeId objectsFolderId = {0, UA_NODEIDTYPE_NUMERIC, {UA_NS0ID_OBJECTSFOLDER}};
-static const UA_NodeId parentReferences[2] =
+static const UA_NodeId parentReferences_events[2] =
     {{0, UA_NODEIDTYPE_NUMERIC, {UA_NS0ID_ORGANIZES}},
      {0, UA_NODEIDTYPE_NUMERIC, {UA_NS0ID_HASCOMPONENT}}};
 
@@ -373,7 +399,13 @@ UA_StatusCode
 UA_Server_triggerEvent(UA_Server *server, const UA_NodeId eventNodeId, const UA_NodeId origin,
                        UA_ByteString *outEventId, const UA_Boolean deleteEventNode) {
     /* Make sure the origin is in the ObjectsFolder (TODO: or in the ViewsFolder) */
-    if(!isNodeInTree(&server->config.nodestore, &origin, &objectsFolderId, parentReferences, 2)) {
+    UA_NodeId *parentTypeHierachy = NULL;
+    size_t parentTypeHierachySize = 0;
+    getTypesHierarchy(&server->config.nodestore, parentReferences_events, 2,
+                      &parentTypeHierachy, &parentTypeHierachySize, UA_TRUE);
+    UA_Boolean isInObjectsFolder = isNodeInTree(&server->config.nodestore, &origin, &objectsFolderId, parentTypeHierachy, parentTypeHierachySize);
+    UA_Array_delete(parentTypeHierachy, parentTypeHierachySize, &UA_TYPES[UA_TYPES_NODEID]);
+    if (!isInObjectsFolder) {
         UA_LOG_ERROR(server->config.logger, UA_LOGCATEGORY_USERLAND,
                      "Node for event must be in ObjectsFolder!");
         return UA_STATUSCODE_BADINVALIDARGUMENT;
@@ -392,7 +424,7 @@ UA_Server_triggerEvent(UA_Server *server, const UA_NodeId eventNodeId, const UA_
     struct getNodesHandle parentHandle;
     parentHandle.server = server;
     LIST_INIT(&parentHandle.nodes);
-    retval = getParentsNodeIteratorCallback(origin, UA_TRUE, parentReferences[1], &parentHandle);
+    retval = getParentsNodeIteratorCallback(origin, UA_TRUE, parentReferences_events[1], &parentHandle);
     if(retval != UA_STATUSCODE_GOOD) {
         UA_LOG_WARNING(server->config.logger, UA_LOGCATEGORY_SERVER,
                        "Events: Could not create the list of nodes listening on the event with StatusCode %s",

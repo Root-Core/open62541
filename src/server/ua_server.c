@@ -20,9 +20,6 @@
 #include "ua_types.h"
 #include "ua_server_internal.h"
 
-#ifdef UA_ENABLE_GENERATE_NAMESPACE0
-#include "ua_namespaceinit_generated.h"
-#endif
 #ifdef UA_ENABLE_PUBSUB_INFORMATIONMODEL
 #include "ua_pubsub_ns0.h"
 #endif
@@ -67,7 +64,16 @@ UA_UInt16 UA_Server_addNamespace(UA_Server *server, const char* name) {
     return addNamespace(server, nameString);
 }
 
-UA_StatusCode 
+UA_ServerConfig*
+UA_Server_getConfig(UA_Server *server)
+{
+  if(!server)
+    return NULL;
+  else
+    return &server->config;
+}
+
+UA_StatusCode
 UA_Server_getNamespaceByName(UA_Server *server, const UA_String namespaceUri,
                              size_t* foundIndex) {
   for(size_t idx = 0; idx < server->namespacesSize; idx++)
@@ -107,10 +113,15 @@ UA_Server_forEachChildNodeCall(UA_Server *server, UA_NodeId parentNodeId,
     UA_StatusCode retval = UA_STATUSCODE_GOOD;
     for(size_t i = parentCopy->referencesSize; i > 0; --i) {
         UA_NodeReferenceKind *ref = &parentCopy->references[i - 1];
-        for(size_t j = 0; j<ref->targetIdsSize; j++)
-            retval |= callback(ref->targetIds[j].nodeId, ref->isInverse,
-                               ref->referenceTypeId, handle);
+        for(size_t j = 0; j<ref->targetIdsSize; j++) {
+            retval = callback(ref->targetIds[j].nodeId, ref->isInverse,
+                              ref->referenceTypeId, handle);
+            if(retval != UA_STATUSCODE_GOOD)
+                goto cleanup;
+        }
     }
+
+cleanup:
     UA_Node_deleteMembers(parentCopy);
     UA_free(parentCopy);
 
@@ -176,9 +187,28 @@ void UA_Server_delete(UA_Server *server) {
             currHash = nextHash;
         }
     }
+
+    mdnsHostnameToIp_list_entry *mhi, *mhi_tmp;
+    LIST_FOREACH_SAFE(mhi, &server->mdnsHostnameToIp, pointers, mhi_tmp) {
+        LIST_REMOVE(mhi, pointers);
+        UA_String_deleteMembers(&mhi->mdnsHostname);
+        UA_free(mhi);
+    }
+
+    for(size_t i = 0; i < MDNS_HOSTNAME_TO_IP_HASH_PRIME; i++) {
+        mdnsHostnameToIp_hash_entry* currHash = server->mdnsHostnameToIpHash[i];
+        while(currHash) {
+            mdnsHostnameToIp_hash_entry* nextHash = currHash->next;
+            UA_free(currHash);
+            currHash = nextHash;
+        }
+    }
 # endif
 
 #endif
+
+    /* Clean up the Admin Session */
+    UA_Session_deleteMembersCleanup(&server->adminSession, server);
 
 #ifdef UA_ENABLE_MULTITHREADING
     /* Process new delayed callbacks from the cleanup */
@@ -219,13 +249,6 @@ UA_Server_new(const UA_ServerConfig *config) {
     if(!config)
         return NULL;
 
-    /* At least one endpoint has to be configured */
-    if(config->endpointsSize == 0) {
-        UA_LOG_FATAL(config->logger, UA_LOGCATEGORY_SERVER,
-                     "There has to be at least one endpoint.");
-        return NULL;
-    }
-
     /* Allocate the server */
     UA_Server *server = (UA_Server *)UA_calloc(1, sizeof(UA_Server));
     if(!server)
@@ -256,6 +279,12 @@ UA_Server_new(const UA_ServerConfig *config) {
     SIMPLEQ_INIT(&server->dispatchQueue);
 #endif
 
+    /* Initialize the adminSession */
+    UA_Session_init(&server->adminSession);
+    server->adminSession.sessionId.identifierType = UA_NODEIDTYPE_GUID;
+    server->adminSession.sessionId.identifier.guid.data1 = 1;
+    server->adminSession.validTill = UA_INT64_MAX;
+
     /* Create Namespaces 0 and 1 */
     server->namespaces = (UA_String *)UA_Array_new(2, &UA_TYPES[UA_TYPES_STRING]);
     server->namespaces[0] = UA_STRING_ALLOC("http://opcfoundation.org/UA/");
@@ -282,11 +311,7 @@ UA_Server_new(const UA_ServerConfig *config) {
     /* Initialize multicast discovery */
 #if defined(UA_ENABLE_DISCOVERY) && defined(UA_ENABLE_DISCOVERY_MULTICAST)
     server->mdnsDaemon = NULL;
-#ifdef _WIN32
-    server->mdnsSocket = INVALID_SOCKET;
-#else
-    server->mdnsSocket = -1;
-#endif
+    server->mdnsSocket = UA_INVALID_SOCKET;
     server->mdnsMainSrvAdded = UA_FALSE;
     if(server->config.applicationDescription.applicationType == UA_APPLICATIONTYPE_DISCOVERYSERVER)
         initMulticastDiscoveryServer(server);
@@ -297,6 +322,11 @@ UA_Server_new(const UA_ServerConfig *config) {
     server->serverOnNetworkRecordIdLastReset = UA_DateTime_now();
     memset(server->serverOnNetworkHash, 0,
            sizeof(struct serverOnNetwork_hash_entry*) * SERVER_ON_NETWORK_HASH_PRIME);
+
+
+    LIST_INIT(&server->mdnsHostnameToIp);
+    memset(server->mdnsHostnameToIpHash, 0,
+           sizeof(struct mdnsHostnameToIp_hash_entry*) * MDNS_HOSTNAME_TO_IP_HASH_PRIME);
 
     server->serverOnNetworkCallback = NULL;
     server->serverOnNetworkCallbackData = NULL;

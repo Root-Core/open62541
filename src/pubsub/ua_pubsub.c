@@ -6,13 +6,15 @@
  */
 
 #include "ua_types_encoding_binary.h"
-#include "ua_server_pubsub.h"
 #include "server/ua_server_internal.h"
+
+#ifdef UA_ENABLE_PUBSUB /* conditional compilation */
+
+#include "ua_server_pubsub.h"
 #include "ua_pubsub.h"
 #include "ua_pubsub_manager.h"
 #include "ua_pubsub_networkmessage.h"
 
-#ifdef UA_ENABLE_PUBSUB /* conditional compilation */
 #ifdef UA_ENABLE_PUBSUB_INFORMATIONMODEL
 #include "ua_pubsub_ns0.h"
 #endif
@@ -258,19 +260,26 @@ UA_Server_addDataSetField(UA_Server *server, const UA_NodeId publishedDataSet,
                           const UA_DataSetFieldConfig *fieldConfig,
                           UA_NodeId *fieldIdentifier) {
     UA_StatusCode retVal = UA_STATUSCODE_GOOD;
+	UA_DataSetFieldResult result = {UA_STATUSCODE_BADINVALIDARGUMENT, {0, 0}};
     if(!fieldConfig)
-        return (UA_DataSetFieldResult) {UA_STATUSCODE_BADINVALIDARGUMENT, {0, 0}};
+        return result;
 
     UA_PublishedDataSet *currentDataSet = UA_PublishedDataSet_findPDSbyId(server, publishedDataSet);
-    if(currentDataSet == NULL)
-        return (UA_DataSetFieldResult) {UA_STATUSCODE_BADNOTFOUND, {0, 0}};
+	if(currentDataSet == NULL){
+		result.result = UA_STATUSCODE_BADNOTFOUND;
+        return result;
+	}
 
-    if(currentDataSet->config.publishedDataSetType != UA_PUBSUB_DATASET_PUBLISHEDITEMS)
-        return (UA_DataSetFieldResult) {UA_STATUSCODE_BADNOTIMPLEMENTED, {0, 0}};
+	if(currentDataSet->config.publishedDataSetType != UA_PUBSUB_DATASET_PUBLISHEDITEMS){
+		result.result = UA_STATUSCODE_BADNOTIMPLEMENTED;
+        return result;
+	}
 
     UA_DataSetField *newField = (UA_DataSetField *) UA_calloc(1, sizeof(UA_DataSetField));
-    if(!newField)
-        return (UA_DataSetFieldResult) {UA_STATUSCODE_BADINTERNALERROR, {0, 0}};
+	if(!newField){
+		result.result = UA_STATUSCODE_BADINTERNALERROR;
+        return result;
+	}
 
     UA_DataSetFieldConfig tmpFieldConfig;
     retVal |= UA_DataSetFieldConfig_copy(fieldConfig, &tmpFieldConfig);
@@ -286,22 +295,23 @@ UA_Server_addDataSetField(UA_Server *server, const UA_NodeId publishedDataSet,
     if(newField->config.field.variable.promotedField)
         currentDataSet->promotedFieldsCount++;
     currentDataSet->fieldSize++;
-    UA_DataSetFieldResult result =
-        {retVal, {currentDataSet->dataSetMetaData.configurationVersion.majorVersion,
-                  currentDataSet->dataSetMetaData.configurationVersion.minorVersion}};
+	result.result = retVal;
+	result.configurationVersion.majorVersion = currentDataSet->dataSetMetaData.configurationVersion.majorVersion;
+	result.configurationVersion.minorVersion = currentDataSet->dataSetMetaData.configurationVersion.minorVersion;
     return result;
 }
 
 UA_DataSetFieldResult
 UA_Server_removeDataSetField(UA_Server *server, const UA_NodeId dsf) {
     UA_DataSetField *currentField = UA_DataSetField_findDSFbyId(server, dsf);
-    if(!currentField)
-        return (UA_DataSetFieldResult) {UA_STATUSCODE_BADNOTFOUND, {0, 0}};
+    UA_DataSetFieldResult result = {UA_STATUSCODE_BADNOTFOUND, {0, 0}};
+	if(!currentField)
+        return result;
 
     UA_PublishedDataSet *parentPublishedDataSet =
         UA_PublishedDataSet_findPDSbyId(server, currentField->publishedDataSet);
     if(!parentPublishedDataSet)
-        return (UA_DataSetFieldResult) {UA_STATUSCODE_BADNOTFOUND, {0, 0}};
+        return result;
 
     parentPublishedDataSet->fieldSize--;
     if(currentField->config.field.variable.promotedField)
@@ -312,9 +322,9 @@ UA_Server_removeDataSetField(UA_Server *server, const UA_NodeId dsf) {
         UA_PubSubConfigurationVersionTimeDifference();
     UA_DataSetField_deleteMembers(currentField);
     UA_free(currentField);
-    UA_DataSetFieldResult result =
-        {UA_STATUSCODE_GOOD, {parentPublishedDataSet->dataSetMetaData.configurationVersion.majorVersion,
-                              parentPublishedDataSet->dataSetMetaData.configurationVersion.minorVersion}};
+	result.result = UA_STATUSCODE_GOOD;
+	result.configurationVersion.majorVersion = parentPublishedDataSet->dataSetMetaData.configurationVersion.majorVersion;
+	result.configurationVersion.minorVersion = parentPublishedDataSet->dataSetMetaData.configurationVersion.minorVersion;
     return result;
 }
 
@@ -988,6 +998,11 @@ UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup) {
         UA_LOG_ERROR(server->config.logger, UA_LOGCATEGORY_SERVER, "Unknown encoding type.");
         return;
     }
+    UA_PubSubConnection *connection = UA_PubSubConnection_findConnectionbyId(server, writerGroup->linkedConnection);
+    if(!connection){
+        UA_LOG_ERROR(server->config.logger, UA_LOGCATEGORY_SERVER, "Publish failed. PubSubConnection invalid.");
+        return;
+    }
     //prevent error if the maxEncapsulatedDataSetMessageCount is set to 0->1
     writerGroup->config.maxEncapsulatedDataSetMessageCount = (UA_UInt16) (writerGroup->config.maxEncapsulatedDataSetMessageCount == 0 ||
                                                                           writerGroup->config.maxEncapsulatedDataSetMessageCount > UA_BYTE_MAX
@@ -1001,7 +1016,9 @@ UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup) {
     memset(dsmStore, 0, sizeof(UA_DataSetMessage) * writerGroup->writersCount);
     //The binary DataSetMessage sizes are part of the payload. Memory is allocated on the stack.
     UA_STACKARRAY(UA_UInt16, dsmSizes, writerGroup->writersCount);
+    UA_STACKARRAY(UA_UInt16, dsWriterIds, writerGroup->writersCount);
     memset(dsmSizes, 0, writerGroup->writersCount * sizeof(UA_UInt16));
+    memset(dsWriterIds, 0, writerGroup->writersCount * sizeof(UA_UInt16));
     /*
      * Calculate the number of needed NetworkMessages. The previous allocated DataSetMessage array is
      * filled from left for combined DSM messages and from the right for single DSM.
@@ -1031,6 +1048,7 @@ UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup) {
                 UA_LOG_ERROR(server->config.logger, UA_LOGCATEGORY_SERVER, "Publish failed. DataSetMessage creation failed");
                 return;
             };
+            dsWriterIds[(writerGroup->writersCount - 1) - singleNetworkMessagesCount] = tmpDataSetWriter->config.dataSetWriterId;
             dsmSizes[(writerGroup->writersCount-1) - singleNetworkMessagesCount] = (UA_UInt16) UA_DataSetMessage_calcSizeBinary(&dsmStore[(writerGroup->writersCount-1)
                                                                                                                                           - singleNetworkMessagesCount]);
             singleNetworkMessagesCount++;
@@ -1039,6 +1057,7 @@ UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup) {
                 UA_LOG_ERROR(server->config.logger, UA_LOGCATEGORY_SERVER, "Publish failed. DataSetMessage creation failed");
                 return;
             };
+            dsWriterIds[combinedNetworkMessageCount] = tmpDataSetWriter->config.dataSetWriterId;
             dsmSizes[combinedNetworkMessageCount] = (UA_UInt16) UA_DataSetMessage_calcSizeBinary(&dsmStore[combinedNetworkMessageCount]);
             combinedNetworkMessageCount++;
         }
@@ -1050,6 +1069,14 @@ UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup) {
                 (combinedNetworkMessageCount % writerGroup->config.maxEncapsulatedDataSetMessageCount) == 0 ? 0 : 1);
         networkMessageCount += combinedNetworkMessageCount;
     }
+    if(networkMessageCount < 1){
+        for(size_t i = 0; i < writerGroup->writersCount; i++){
+            UA_DataSetMessage_free(&dsmStore[i]);
+        }
+        UA_free(dsmStore);
+        return;
+    }
+
     //Alloc memory for the NetworkMessages on the stack
     UA_STACKARRAY(UA_NetworkMessage, nmStore, networkMessageCount);
     memset(nmStore, 0, networkMessageCount * sizeof(UA_NetworkMessage));
@@ -1057,6 +1084,7 @@ UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup) {
     for(UA_UInt32 i = 0; i < networkMessageCount; i++) {
         nmStore[i].version = 1;
         nmStore[i].networkMessageType = UA_NETWORKMESSAGE_DATASET;
+        nmStore[i].payloadHeaderEnabled = UA_TRUE;
         //create combined NetworkMessages
         if(i < (networkMessageCount-singleNetworkMessagesCount)){
             if(combinedNetworkMessageCount - (i * writerGroup->config.maxEncapsulatedDataSetMessageCount)){
@@ -1070,11 +1098,13 @@ UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup) {
                 //nmStore[i].payloadHeader.dataSetPayloadHeader.count = (UA_Byte) writerGroup->config.maxEncapsulatedDataSetMessageCount;
                 nmStore[i].payload.dataSetPayload.dataSetMessages = &dsmStore[currentDSMPosition];
                 nmStore->payload.dataSetPayload.sizes = &dsmSizes[currentDSMPosition];
+                nmStore->payloadHeader.dataSetPayloadHeader.dataSetWriterIds = &dsWriterIds[currentDSMPosition];
             } else {
                 currentDSMPosition = i * writerGroup->config.maxEncapsulatedDataSetMessageCount;
                 nmStore[i].payloadHeader.dataSetPayloadHeader.count = (UA_Byte) (currentDSMPosition - ((i - 1) * writerGroup->config.maxEncapsulatedDataSetMessageCount)); //attention cast from uint32 to byte
                 nmStore[i].payload.dataSetPayload.dataSetMessages = &dsmStore[currentDSMPosition];
                 nmStore->payload.dataSetPayload.sizes = &dsmSizes[currentDSMPosition];
+                nmStore->payloadHeader.dataSetPayloadHeader.dataSetWriterIds = &dsWriterIds[currentDSMPosition];
             }
         } else {///create single NetworkMessages (1 DSM per NM)
             nmStore[i].payloadHeader.dataSetPayloadHeader.count = 1;
@@ -1082,11 +1112,7 @@ UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup) {
                                                                             + (combinedNetworkMessageCount % writerGroup->config.maxEncapsulatedDataSetMessageCount) == 0 ? 0 : 1);
             nmStore[i].payload.dataSetPayload.dataSetMessages = &dsmStore[currentDSMPosition];
             nmStore->payload.dataSetPayload.sizes = &dsmSizes[currentDSMPosition];
-        }
-        UA_PubSubConnection *connection = UA_PubSubConnection_findConnectionbyId(server, writerGroup->linkedConnection);
-        if(!connection){
-            UA_LOG_ERROR(server->config.logger, UA_LOGCATEGORY_SERVER, "Publish failed. PubSubConnection invalid.");
-            return;
+            nmStore->payloadHeader.dataSetPayloadHeader.dataSetWriterIds = &dsWriterIds[currentDSMPosition];
         }
         //send the prepared messages
         UA_ByteString buf;
@@ -1101,9 +1127,9 @@ UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup) {
             };
             connection->channel->send(connection->channel, NULL, &buf);
         }
-        nmStore[i].payloadHeaderEnabled = UA_TRUE;
-        //The stack allocated sizes field must be set to NULL to prevent invalid free.
+        //The stack allocated sizes and dataSetWriterIds field must be set to NULL to prevent invalid free.
         nmStore[i].payload.dataSetPayload.sizes = NULL;
+        nmStore->payloadHeader.dataSetPayloadHeader.dataSetWriterIds = NULL;
         UA_ByteString_deleteMembers(&buf);
         UA_NetworkMessage_deleteMembers(&nmStore[i]);
     }

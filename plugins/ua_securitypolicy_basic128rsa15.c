@@ -15,10 +15,9 @@
 #include <mbedtls/version.h>
 #include <mbedtls/sha1.h>
 
-#include "ua_plugin_pki.h"
-#include "ua_plugin_securitypolicy.h"
-#include "ua_securitypolicy_basic128rsa15.h"
 #include "ua_types.h"
+#include "ua_plugin_pki.h"
+#include "ua_securitypolicies.h"
 #include "ua_types_generated_handling.h"
 
 /* Notes:
@@ -77,7 +76,6 @@ typedef struct {
 
     mbedtls_x509_crt remoteCertificate;
 } Basic128Rsa15_ChannelContext;
-
 
 /********************/
 /* AsymmetricModule */
@@ -522,7 +520,7 @@ sym_generateKey_sp_basic128rsa15(const UA_SecurityPolicy *securityPolicy,
         if(offset + hashLen > out->length) {
             outSegment.data = NULL;
             outSegment.length = 0;
-            retval |= UA_ByteString_allocBuffer(&outSegment, hashLen);
+            retval = UA_ByteString_allocBuffer(&outSegment, hashLen);
             if(retval != UA_STATUSCODE_GOOD) {
                 UA_ByteString_deleteMembers(&A_and_seed);
                 UA_ByteString_deleteMembers(&ANext_and_seed);

@@ -14,7 +14,7 @@
  *    Copyright 2016 (c) Lorenz Haas
  */
 
-#include "ua_util.h"
+#include "ua_util_internal.h"
 #include "ua_types.h"
 #include "ua_types_generated.h"
 #include "ua_types_generated_handling.h"
@@ -71,7 +71,8 @@ UA_findDataType(const UA_NodeId *typeId) {
 /* Random Number Generator */
 /***************************/
 
-static UA_THREAD_LOCAL pcg32_random_t UA_rng = PCG32_INITIALIZER;
+//TODO is this safe for multithreading?
+static pcg32_random_t UA_rng = PCG32_INITIALIZER;
 
 void
 UA_random_seed(u64 seed) {
@@ -258,27 +259,9 @@ NodeId_copy(UA_NodeId const *src, UA_NodeId *dst, const UA_DataType *_) {
 
 UA_Boolean
 UA_NodeId_isNull(const UA_NodeId *p) {
-    if(p->namespaceIndex != 0)
-        return false;
-    switch(p->identifierType) {
-    case UA_NODEIDTYPE_NUMERIC:
-        return (p->identifier.numeric == 0);
-    case UA_NODEIDTYPE_GUID:
-        return (p->identifier.guid.data1 == 0 &&
-                p->identifier.guid.data2 == 0 &&
-                p->identifier.guid.data3 == 0 &&
-                p->identifier.guid.data4[0] == 0 &&
-                p->identifier.guid.data4[1] == 0 &&
-                p->identifier.guid.data4[2] == 0 &&
-                p->identifier.guid.data4[3] == 0 &&
-                p->identifier.guid.data4[4] == 0 &&
-                p->identifier.guid.data4[5] == 0 &&
-                p->identifier.guid.data4[6] == 0 &&
-                p->identifier.guid.data4[7] == 0);
-    default:
-        break;
-    }
-    return (p->identifier.string.length == 0);
+    return p->namespaceIndex == 0 &&
+        p->identifierType == UA_NODEIDTYPE_NUMERIC &&
+        p->identifier.numeric == 0;
 }
 
 UA_Boolean
@@ -550,7 +533,7 @@ computeStrides(const UA_Variant *v, const UA_NumericRange range,
     *stride = v->arrayLength; /* So it can be copied as a contiguous block.   */
     *first = 0;
     size_t running_dimssize = 1;
-    bool found_contiguous = false;
+    UA_Boolean found_contiguous = false;
     for(size_t k = dims_count; k > 0;) {
         --k;
         size_t dimrange = 1 + realmax[k] - range.dimensions[k].min;
@@ -567,7 +550,7 @@ computeStrides(const UA_Variant *v, const UA_NumericRange range,
 }
 
 /* Is the type string-like? */
-static bool
+static UA_Boolean
 isStringLike(const UA_DataType *type) {
     if(type == &UA_TYPES[UA_TYPES_STRING] ||
        type == &UA_TYPES[UA_TYPES_BYTESTRING] ||
@@ -604,8 +587,8 @@ UA_Variant_copyRange(const UA_Variant *src, UA_Variant *dst,
                      const UA_NumericRange range) {
     if(!src->type)
         return UA_STATUSCODE_BADINVALIDARGUMENT;
-    bool isScalar = UA_Variant_isScalar(src);
-    bool stringLike = isStringLike(src->type);
+    UA_Boolean isScalar = UA_Variant_isScalar(src);
+    UA_Boolean stringLike = isStringLike(src->type);
     UA_Variant arraySrc;
 
     /* Extract the range for copying at this level. The remaining range is dealt
@@ -733,7 +716,7 @@ UA_Variant_copyRange(const UA_Variant *src, UA_Variant *dst,
  * variant and strings. This is already possible for reading... */
 static UA_StatusCode
 Variant_setRange(UA_Variant *v, void *array, size_t arraySize,
-                 const UA_NumericRange range, bool copy) {
+                 const UA_NumericRange range, UA_Boolean copy) {
     /* Compute the strides */
     size_t count, block, stride, first;
     UA_StatusCode retval = computeStrides(v, range, &count,

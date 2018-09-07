@@ -54,6 +54,12 @@ builtin_overlayable = {"Boolean": "true",
                        "offsetof(UA_Guid, data3) == (sizeof(UA_UInt16) + sizeof(UA_UInt32)) && " + \
                        "offsetof(UA_Guid, data4) == (2*sizeof(UA_UInt32)))"}
 
+# Type aliases
+type_aliases = { "CharArray" : "String" }
+def getTypeName(xmlTypeName):
+   typeName = xmlTypeName[xmlTypeName.find(":")+1:]
+   return type_aliases.get(typeName, typeName);
+
 ################
 # Type Classes #
 ################
@@ -148,7 +154,7 @@ class Type(object):
         funcs += "static UA_INLINE UA_%s *\nUA_%s_new(void) {\n    return (UA_%s*)UA_new(%s);\n}\n\n" % (self.name, self.name, self.name, self.datatype_ptr())
         if self.pointerfree == "true":
             funcs += "static UA_INLINE UA_StatusCode\nUA_%s_copy(const UA_%s *src, UA_%s *dst) {\n    *dst = *src;\n    return UA_STATUSCODE_GOOD;\n}\n\n" % (self.name, self.name, self.name)
-            funcs += "static UA_INLINE void\nUA_%s_deleteMembers(UA_%s *p) { }\n\n" % (self.name, self.name)
+            funcs += "static UA_INLINE void\nUA_%s_deleteMembers(UA_%s *p) {\n    memset(p, 0, sizeof(UA_%s));\n}\n\n" % (self.name, self.name, self.name)
         else:
             funcs += "static UA_INLINE UA_StatusCode\nUA_%s_copy(const UA_%s *src, UA_%s *dst) {\n    return UA_copy(src, dst, %s);\n}\n\n" % (self.name, self.name, self.name, self.datatype_ptr())
             funcs += "static UA_INLINE void\nUA_%s_deleteMembers(UA_%s *p) {\n    UA_deleteMembers(p, %s);\n}\n\n" % (self.name, self.name, self.datatype_ptr())
@@ -224,8 +230,8 @@ class StructType(Type):
                 continue
             memberName = child.get("Name")
             memberName = memberName[:1].lower() + memberName[1:]
-            memberTypeName = child.get("TypeName")
-            memberType = types[memberTypeName[memberTypeName.find(":")+1:]]
+            memberTypeName = getTypeName(child.get("TypeName"))
+            memberType = types[memberTypeName]
             isArray = True if child.get("LengthField") else False
             self.members.append(StructMember(memberName, memberType, isArray))
 
@@ -266,10 +272,20 @@ def parseTypeDefinitions(outname, xmlDescription, namespace):
         "Are all member types defined?"
         for child in element:
             if child.tag == "{http://opcfoundation.org/BinarySchema/}Field":
-                childname = child.get("TypeName")
-                if childname[childname.find(":")+1:] not in types:
+                childname = getTypeName(child.get("TypeName"))
+                if childname not in types:
                     return False
         return True
+
+    def unknownTypes(element):
+        "Return all unknown types"
+        unknowns = []
+        for child in element:
+            if child.tag == "{http://opcfoundation.org/BinarySchema/}Field":
+                childname = getTypeName(child.get("TypeName"))
+                if childname not in types:
+                    unknowns.append(childname)
+        return unknowns
 
     def skipType(name):
         if name in excluded_types:
@@ -287,7 +303,12 @@ def parseTypeDefinitions(outname, xmlDescription, namespace):
         name = typeXml.get("Name")
         snippets[name] = typeXml
 
+    detectLoop = len(snippets)+1
     while(len(snippets) > 0):
+        if detectLoop == len(snippets):
+            name, typeXml = (snippets.items())[0]
+            raise RuntimeError("Infinite loop detected trying to processing types " + name + ": unknonwn subtype " + str(unknownTypes(typeXml)))
+        detectLoop = len(snippets)
         for name, typeXml in list(snippets.items()):
             if name in types or skipType(name):
                 del snippets[name]
@@ -483,16 +504,14 @@ printh('''/* Generated from ''' + inname + ''' with script ''' + sys.argv[0] + '
 #ifndef ''' + outname.upper() + '''_GENERATED_H_
 #define ''' + outname.upper() + '''_GENERATED_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifdef UA_NO_AMALGAMATION
 #include "ua_types.h"
 ''' + ('#include "ua_types_generated.h"\n' if outname != "ua_types" else '') + '''
 #else
 #include "open62541.h"
 #endif
+
+_UA_BEGIN_DECLS
 
 ''')
 
@@ -519,9 +538,9 @@ for t in filtered_types:
     i += 1
 
 printh('''
-#ifdef __cplusplus
-} // extern "C"
-#endif\n
+
+_UA_END_DECLS
+
 #endif /* %s_GENERATED_H_ */''' % outname.upper())
 
 ##################
@@ -535,11 +554,9 @@ printf('''/* Generated from ''' + inname + ''' with script ''' + sys.argv[0] + '
 #ifndef ''' + outname.upper() + '''_GENERATED_HANDLING_H_
 #define ''' + outname.upper() + '''_GENERATED_HANDLING_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "''' + outname + '''_generated.h"
+
+_UA_BEGIN_DECLS
 
 #if defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
 # pragma GCC diagnostic push
@@ -557,9 +574,8 @@ printf('''
 # pragma GCC diagnostic pop
 #endif
 
-#ifdef __cplusplus
-} // extern "C"
-#endif\n
+_UA_END_DECLS
+
 #endif /* %s_GENERATED_HANDLING_H_ */''' % outname.upper())
 
 ###########################

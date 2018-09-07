@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. 
  *
  *    Copyright 2014-2018 (c) Fraunhofer IOSB (Author: Julius Pfrommer)
- *    Copyright 2014, 2017 (c) Florian Palm
+ *    Copyright 2014-2017 (c) Florian Palm
  *    Copyright 2014-2016 (c) Sten Grüner
  *    Copyright 2015 (c) Chris Iatrou
  *    Copyright 2015 (c) Oleksiy Vasylyev
@@ -93,30 +93,13 @@ Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
     }
 
     /* TODO: Compare application URI with certificate uri (decode certificate) */
-
-    /* Allocate the response */
-    response->serverEndpoints = (UA_EndpointDescription *)
-        UA_Array_new(server->config.endpointsSize,
-                     &UA_TYPES[UA_TYPES_ENDPOINTDESCRIPTION]);
-    if(!response->serverEndpoints) {
-        response->responseHeader.serviceResult = UA_STATUSCODE_BADOUTOFMEMORY;
-        return;
-    }
-    response->serverEndpointsSize = server->config.endpointsSize;
-
-    /* Copy the server's endpointdescriptions into the response */
-    for(size_t i = 0; i < server->config.endpointsSize; ++i)
-        response->responseHeader.serviceResult |=
-            UA_EndpointDescription_copy(&server->config.endpoints[i].endpointDescription,
-                                        &response->serverEndpoints[i]);
-    if(response->responseHeader.serviceResult != UA_STATUSCODE_GOOD)
-        return;
-
-    /* Mirror back the endpointUrl */
-    for(size_t i = 0; i < response->serverEndpointsSize; ++i) {
-        UA_String_deleteMembers(&response->serverEndpoints[i].endpointUrl);
-        UA_String_copy(&request->endpointUrl,
-                       &response->serverEndpoints[i].endpointUrl);
+    UA_CertificateVerification *cv = channel->securityPolicy->certificateVerification;
+    if(cv && cv->verifyApplicationURI) {
+        response->responseHeader.serviceResult =
+            cv->verifyApplicationURI(cv->context, &request->clientCertificate,
+                                     &request->clientDescription.applicationUri);
+        if(response->responseHeader.serviceResult != UA_STATUSCODE_GOOD)
+            return;
     }
 
     UA_Session *newSession = NULL;
@@ -130,13 +113,44 @@ Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
 
     UA_assert(newSession != NULL);
 
+    /* Allocate the response */
+    response->serverEndpoints = (UA_EndpointDescription *)
+        UA_Array_new(server->config.endpointsSize,
+                     &UA_TYPES[UA_TYPES_ENDPOINTDESCRIPTION]);
+    if(!response->serverEndpoints) {
+        response->responseHeader.serviceResult = UA_STATUSCODE_BADOUTOFMEMORY;
+        UA_SessionManager_removeSession(&server->sessionManager,
+                                        &newSession->header.authenticationToken);
+        return;
+    }
+    response->serverEndpointsSize = server->config.endpointsSize;
+
+    /* Copy the server's endpointdescriptions into the response */
+    for(size_t i = 0; i < server->config.endpointsSize; ++i)
+        response->responseHeader.serviceResult |=
+            UA_EndpointDescription_copy(&server->config.endpoints[i].endpointDescription,
+                                        &response->serverEndpoints[i]);
+    if(response->responseHeader.serviceResult != UA_STATUSCODE_GOOD) {
+        UA_SessionManager_removeSession(&server->sessionManager,
+                                        &newSession->header.authenticationToken);
+        return;
+    }
+
+    /* Mirror back the endpointUrl */
+    for(size_t i = 0; i < response->serverEndpointsSize; ++i) {
+        UA_String_deleteMembers(&response->serverEndpoints[i].endpointUrl);
+        response->responseHeader.serviceResult |=
+            UA_String_copy(&request->endpointUrl,
+                           &response->serverEndpoints[i].endpointUrl);
+    }
+
     /* Attach the session to the channel. But don't activate for now. */
     UA_Session_attachToSecureChannel(newSession, channel);
 
     /* Fill the session information */
     newSession->maxResponseMessageSize = request->maxResponseMessageSize;
     newSession->maxRequestMessageSize =
-        channel->connection->localConf.maxMessageSize;
+        channel->connection->config.maxMessageSize;
     response->responseHeader.serviceResult |=
         UA_ApplicationDescription_copy(&request->clientDescription,
                                        &newSession->clientDescription);
@@ -145,7 +159,7 @@ Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
     response->sessionId = newSession->sessionId;
     response->revisedSessionTimeout = (UA_Double)newSession->timeout;
     response->authenticationToken = newSession->header.authenticationToken;
-    response->responseHeader.serviceResult =
+    response->responseHeader.serviceResult |=
         UA_String_copy(&request->sessionName, &newSession->sessionName);
 
     if(server->config.endpointsSize > 0)
@@ -154,7 +168,7 @@ Service_CreateSession(UA_Server *server, UA_SecureChannel *channel,
                                &response->serverCertificate);
 
     /* Create a session nonce */
-    response->responseHeader.serviceResult = UA_Session_generateNonce(newSession);
+    response->responseHeader.serviceResult |= UA_Session_generateNonce(newSession);
     response->responseHeader.serviceResult |=
         UA_ByteString_copy(&newSession->serverNonce, &response->serverNonce);
 
@@ -242,10 +256,59 @@ Service_ActivateSession(UA_Server *server, UA_SecureChannel *channel,
         return;
     }
 
+    /* Find the matching endpoint */
+    const UA_EndpointDescription *ed = NULL;
+    for(size_t i = 0; ed == NULL && i < server->config.endpointsSize; ++i) {
+        const UA_Endpoint *e = &server->config.endpoints[i];
+
+        /* Match the Security Mode */
+        if(e->endpointDescription.securityMode != channel->securityMode)
+            continue;
+
+        /* Match the SecurityPolicy */
+        if(!UA_String_equal(&e->securityPolicy.policyUri,
+                            &channel->securityPolicy->policyUri))
+            continue;
+
+        /* Match the UserTokenType */
+        for(size_t j = 0; j < e->endpointDescription.userIdentityTokensSize; j++) {
+            const UA_UserTokenPolicy *u = &e->endpointDescription.userIdentityTokens[j];
+            if(u->tokenType == UA_USERTOKENTYPE_ANONYMOUS) {
+                if(request->userIdentityToken.content.decoded.type != &UA_TYPES[UA_TYPES_ANONYMOUSIDENTITYTOKEN])
+                    continue;
+            } else if(u->tokenType == UA_USERTOKENTYPE_USERNAME) {
+                if(request->userIdentityToken.content.decoded.type != &UA_TYPES[UA_TYPES_USERNAMEIDENTITYTOKEN])
+                    continue;
+            } else if(u->tokenType == UA_USERTOKENTYPE_CERTIFICATE) {
+                if(request->userIdentityToken.content.decoded.type != &UA_TYPES[UA_TYPES_X509IDENTITYTOKEN])
+                    continue;
+            } else if(u->tokenType == UA_USERTOKENTYPE_ISSUEDTOKEN) {
+                if(request->userIdentityToken.content.decoded.type != &UA_TYPES[UA_TYPES_ISSUEDIDENTITYTOKEN])
+                    continue;
+            } else {
+                response->responseHeader.serviceResult = UA_STATUSCODE_BADIDENTITYTOKENINVALID;
+                return;
+            }
+
+            /* Match found */
+            ed = &e->endpointDescription;
+            break;
+        }
+
+    }
+
+    /* No matching endpoint found */
+    if(!ed) {
+        response->responseHeader.serviceResult = UA_STATUSCODE_BADIDENTITYTOKENREJECTED;
+        return;
+    }
+
     /* Callback into userland access control */
     response->responseHeader.serviceResult =
         server->config.accessControl.activateSession(server, &server->config.accessControl,
-                                                     &session->sessionId, &request->userIdentityToken,
+                                                     ed, &channel->remoteCertificate,
+                                                     &session->sessionId,
+                                                     &request->userIdentityToken,
                                                      &session->sessionHandle);
     if(response->responseHeader.serviceResult != UA_STATUSCODE_GOOD) {
         UA_LOG_INFO_SESSION(server->config.logger, session,

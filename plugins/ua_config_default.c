@@ -18,13 +18,7 @@
 #include "ua_accesscontrol_default.h"
 #include "ua_pki_certificate.h"
 #include "ua_nodestore_default.h"
-#include "ua_securitypolicy_none.h"
-
-#ifdef UA_ENABLE_ENCRYPTION
-#include "ua_securitypolicy_basic128rsa15.h"
-#include "ua_securitypolicy_basic256sha256.h"
-#endif
-
+#include "ua_securitypolicies.h"
 
 /* Struct initialization works across ANSI C/C99/C++ if it is done when the
  * variable is first declared. Assigning values to existing structs is
@@ -255,6 +249,9 @@ createDefaultConfig(void) {
     /* Access Control. Anonymous Login only. */
     conf->accessControl = UA_AccessControl_default(true, usernamePasswordsSize, usernamePasswords);
 
+    /* Relax constraints for the InformationModel */
+    conf->relaxEmptyValueConstraint = true; /* Allow empty values */
+
     /* Limits for SecureChannels */
     conf->maxSecureChannels = 40;
     conf->maxSecurityTokenLifetime = 10 * 60 * 1000; /* 10 minutes */
@@ -314,23 +311,31 @@ createDefaultConfig(void) {
 }
 
 static UA_StatusCode
-addDefaultNetworkLayers(UA_ServerConfig *conf, UA_UInt16 portNumber) {
+addDefaultNetworkLayers(UA_ServerConfig *conf, UA_UInt16 portNumber, UA_UInt32 sendBufferSize, UA_UInt32 recvBufferSize) {
     /* Add a network layer */
     conf->networkLayers = (UA_ServerNetworkLayer *)
         UA_malloc(sizeof(UA_ServerNetworkLayer));
     if(!conf->networkLayers)
         return UA_STATUSCODE_BADOUTOFMEMORY;
 
+    UA_ConnectionConfig config = UA_ConnectionConfig_default;
+    if (sendBufferSize > 0)
+        config.sendBufferSize = sendBufferSize;
+    if (recvBufferSize > 0)
+        config.recvBufferSize = recvBufferSize;
+
     conf->networkLayers[0] =
-        UA_ServerNetworkLayerTCP(UA_ConnectionConfig_default, portNumber, conf->logger);
+        UA_ServerNetworkLayerTCP(config, portNumber, conf->logger);
     conf->networkLayersSize = 1;
 
     return UA_STATUSCODE_GOOD;
 }
 
 UA_ServerConfig *
-UA_ServerConfig_new_minimal(UA_UInt16 portNumber,
-                            const UA_ByteString *certificate) {
+UA_ServerConfig_new_customBuffer(UA_UInt16 portNumber,
+                                 const UA_ByteString *certificate,
+                                 UA_UInt32 sendBufferSize,
+                                 UA_UInt32 recvBufferSize) {
     UA_ServerConfig *conf = createDefaultConfig();
 
     UA_StatusCode retval = UA_Nodestore_default_new(&conf->nodestore);
@@ -339,7 +344,7 @@ UA_ServerConfig_new_minimal(UA_UInt16 portNumber,
         return NULL;
     }
 
-    if(addDefaultNetworkLayers(conf, portNumber) != UA_STATUSCODE_GOOD) {
+    if(addDefaultNetworkLayers(conf, portNumber, sendBufferSize, recvBufferSize) != UA_STATUSCODE_GOOD) {
         UA_ServerConfig_delete(conf);
         return NULL;
     }
@@ -392,7 +397,7 @@ UA_ServerConfig_new_basic128rsa15(UA_UInt16 portNumber,
         return NULL;
     }
 
-    if(addDefaultNetworkLayers(conf, portNumber) != UA_STATUSCODE_GOOD) {
+    if(addDefaultNetworkLayers(conf, portNumber, 0, 0) != UA_STATUSCODE_GOOD) {
         UA_ServerConfig_delete(conf);
         return NULL;
     }
@@ -462,7 +467,7 @@ UA_ServerConfig_new_basic256sha256(UA_UInt16 portNumber,
         return NULL;
     }
 
-    if(addDefaultNetworkLayers(conf, portNumber) != UA_STATUSCODE_GOOD) {
+    if(addDefaultNetworkLayers(conf, portNumber, 0, 0) != UA_STATUSCODE_GOOD) {
         UA_ServerConfig_delete(conf);
         return NULL;
     }
@@ -532,7 +537,7 @@ UA_ServerConfig_new_allSecurityPolicies(UA_UInt16 portNumber,
         return NULL;
     }
 
-    if(addDefaultNetworkLayers(conf, portNumber) != UA_STATUSCODE_GOOD) {
+    if(addDefaultNetworkLayers(conf, portNumber, 0, 0) != UA_STATUSCODE_GOOD) {
         UA_ServerConfig_delete(conf);
         return NULL;
     }
@@ -620,11 +625,13 @@ UA_ServerConfig_delete(UA_ServerConfig *config) {
         config->nodestore.deleteNodestore(config->nodestore.context);
 
     /* Custom DataTypes */
-    for(size_t i = 0; i < config->customDataTypesSize; ++i)
-        UA_free(config->customDataTypes[i].members);
-    UA_free(config->customDataTypes);
-    config->customDataTypes = NULL;
-    config->customDataTypesSize = 0;
+    if(config->customDataTypesSize > 0) {
+        for(size_t i = 0; i < config->customDataTypesSize; ++i)
+            UA_free(config->customDataTypes[i].members);
+        UA_free(config->customDataTypes);
+        config->customDataTypes = NULL;
+        config->customDataTypesSize = 0;
+    }
 
     /* Networking */
     for(size_t i = 0; i < config->networkLayersSize; ++i)
@@ -650,9 +657,11 @@ UA_ServerConfig_delete(UA_ServerConfig *config) {
     /* Access Control */
     config->accessControl.deleteMembers(&config->accessControl);
 
-    /* Historical Data */
-    if (config->historyAccessPlugin.deleteMembers)
-        config->historyAccessPlugin.deleteMembers(&config->historyAccessPlugin);
+    /* Historical data */
+#ifdef UA_ENABLE_HISTORIZING
+    if (config->historyDatabase.deleteMembers)
+        config->historyDatabase.deleteMembers(&config->historyDatabase);
+#endif
 
     UA_free(config);
 }
@@ -660,6 +669,11 @@ UA_ServerConfig_delete(UA_ServerConfig *config) {
 /***************************/
 /* Default Client Settings */
 /***************************/
+
+static UA_INLINE void UA_ClientConnectionTCP_poll_callback(UA_Client *client, void *data) {
+    UA_ClientConnectionTCP_poll(client, data);
+}
+
 
 const UA_ClientConfig UA_ClientConfig_default = {
     5000, /* .timeout, 5 seconds */
@@ -674,18 +688,18 @@ const UA_ClientConfig UA_ClientConfig_default = {
     },
     UA_ClientConnectionTCP, /* .connectionFunc (for sync connection) */
     UA_ClientConnectionTCP_init, /* .initConnectionFunc (for async client) */
-    UA_ClientConnectionTCP_poll, /* .pollConnectionFunc (for async connection) */
-    0, /* .customDataTypesSize */
+    UA_ClientConnectionTCP_poll_callback, /* .pollConnectionFunc (for async connection) */
+    0,    /* .customDataTypesSize */
     NULL, /* .customDataTypes */
 
     NULL, /* .stateCallback */
-#ifdef UA_ENABLE_SUBSCRIPTIONS
-    NULL, /* .subscriptionInactivityCallback */
-#endif
+    0,    /* .connectivityCheckInterval */
+
     NULL, /* .inactivityCallback */
     NULL, /* .clientContext */
+
 #ifdef UA_ENABLE_SUBSCRIPTIONS
-    10, /* .outStandingPublishRequests */
+    10,  /* .outStandingPublishRequests */
+    NULL /* .subscriptionInactivityCallback */
 #endif
-    0 /* .connectivityCheckInterval */
 };

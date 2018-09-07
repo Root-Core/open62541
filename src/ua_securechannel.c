@@ -11,7 +11,7 @@
  *    Copyright 2017-2018 (c) Mark Giraud, Fraunhofer IOSB
  */
 
-#include "ua_util.h"
+#include "ua_util_internal.h"
 #include "ua_securechannel.h"
 #include "ua_types_encoding_binary.h"
 #include "ua_types_generated_encoding_binary.h"
@@ -33,23 +33,28 @@ const UA_ByteString
     UA_SECURITY_POLICY_NONE_URI = {47, (UA_Byte *)"http://opcfoundation.org/UA/SecurityPolicy#None"};
 
 #ifdef UA_ENABLE_UNIT_TEST_FAILURE_HOOKS
-UA_THREAD_LOCAL UA_StatusCode decrypt_verifySignatureFailure;
-UA_THREAD_LOCAL UA_StatusCode sendAsym_sendFailure;
-UA_THREAD_LOCAL UA_StatusCode processSym_seqNumberFailure;
+UA_StatusCode decrypt_verifySignatureFailure;
+UA_StatusCode sendAsym_sendFailure;
+UA_StatusCode processSym_seqNumberFailure;
 #endif
 
-UA_StatusCode
-UA_SecureChannel_init(UA_SecureChannel *channel,
-                      const UA_SecurityPolicy *securityPolicy,
-                      const UA_ByteString *remoteCertificate) {
-    if(channel == NULL || securityPolicy == NULL || remoteCertificate == NULL)
-        return UA_STATUSCODE_BADINTERNALERROR;
-
+void
+UA_SecureChannel_init(UA_SecureChannel *channel) {
     /* Linked lists are also initialized by zeroing out */
     memset(channel, 0, sizeof(UA_SecureChannel));
     channel->state = UA_SECURECHANNELSTATE_FRESH;
-    channel->securityPolicy = securityPolicy;
+    TAILQ_INIT(&channel->messages);
+}
 
+UA_StatusCode
+UA_SecureChannel_setSecurityPolicy(UA_SecureChannel *channel,
+                                   const UA_SecurityPolicy *securityPolicy,
+                                   const UA_ByteString *remoteCertificate) {
+    /* Is a policy already configured? */
+    if(channel->securityPolicy)
+        return UA_STATUSCODE_BADINTERNALERROR;
+    
+    channel->securityPolicy = securityPolicy;
     UA_StatusCode retval;
     if(channel->securityPolicy->certificateVerification != NULL) {
         retval = channel->securityPolicy->certificateVerification->
@@ -77,6 +82,38 @@ UA_SecureChannel_init(UA_SecureChannel *channel,
                                   &remoteCertificateThumbprint);
 
     return retval;
+}
+
+static void deleteMessage(UA_Message *me) {
+    UA_ChunkPayload *cp;
+    while((cp = SIMPLEQ_FIRST(&me->chunkPayloads))) {
+        if(cp->copied)
+            UA_ByteString_deleteMembers(&cp->bytes);
+        SIMPLEQ_REMOVE_HEAD(&me->chunkPayloads, pointers);
+        UA_free(cp);
+    }
+    UA_free(me);
+}
+
+static void
+deleteLatestMessage(UA_SecureChannel *channel, UA_UInt32 requestId) {
+    UA_Message *me = TAILQ_LAST(&channel->messages, UA_MessageQueue);
+    if(!me)
+        return;
+    if(me->requestId != requestId)
+        return;
+
+    TAILQ_REMOVE(&channel->messages, me, pointers);
+    deleteMessage(me);
+}
+
+void
+UA_SecureChannel_deleteMessages(UA_SecureChannel *channel) {
+    UA_Message *me, *me_tmp;
+    TAILQ_FOREACH_SAFE(me, &channel->messages, pointers, me_tmp) {
+        TAILQ_REMOVE(&channel->messages, me, pointers);
+        deleteMessage(me);
+    }
 }
 
 void
@@ -107,13 +144,8 @@ UA_SecureChannel_deleteMembersCleanup(UA_SecureChannel *channel) {
         LIST_REMOVE(sh, pointers);
     }
 
-    /* Remove the buffered chunks */
-    struct ChunkEntry *ch, *temp_ch;
-    LIST_FOREACH_SAFE(ch, &channel->chunks, pointers, temp_ch) {
-        UA_ByteString_deleteMembers(&ch->bytes);
-        LIST_REMOVE(ch, pointers);
-        UA_free(ch);
-    }
+    /* Remove the buffered messages */
+    UA_SecureChannel_deleteMessages(channel);
 }
 
 UA_StatusCode
@@ -221,7 +253,7 @@ UA_SecureChannel_generateNewKeys(UA_SecureChannel *channel) {
 UA_SessionHeader *
 UA_SecureChannel_getSession(UA_SecureChannel *channel,
                             const UA_NodeId *authenticationToken) {
-    struct UA_SessionHeader *sh;
+    UA_SessionHeader *sh;
     LIST_FOREACH(sh, &channel->sessions, pointers) {
         if(UA_NodeId_equal(&sh->authenticationToken, authenticationToken))
             break;
@@ -313,7 +345,7 @@ UA_SecureChannel_sendAsymmetricOPNMessage(UA_SecureChannel *channel, UA_UInt32 r
     /* Allocate the message buffer */
     UA_ByteString buf = UA_BYTESTRING_NULL;
     UA_StatusCode retval =
-        connection->getSendBuffer(connection, connection->localConf.sendBufferSize, &buf);
+        connection->getSendBuffer(connection, connection->config.sendBufferSize, &buf);
     if(retval != UA_STATUSCODE_GOOD)
         return retval;
 
@@ -499,11 +531,11 @@ sendSymmetricChunk(UA_MessageContext *mc) {
     size_t bodyLength = (uintptr_t)buf_body_end - (uintptr_t)buf_body_start;
     mc->messageSizeSoFar += bodyLength;
     mc->chunksSoFar++;
-    if(mc->messageSizeSoFar > connection->remoteConf.maxMessageSize &&
-       connection->remoteConf.maxMessageSize != 0)
+    if(mc->messageSizeSoFar > connection->config.maxMessageSize &&
+       connection->config.maxMessageSize != 0)
         res = UA_STATUSCODE_BADRESPONSETOOLARGE;
-    if(mc->chunksSoFar > connection->remoteConf.maxChunkCount &&
-       connection->remoteConf.maxChunkCount != 0)
+    if(mc->chunksSoFar > connection->config.maxChunkCount &&
+       connection->config.maxChunkCount != 0)
         res = UA_STATUSCODE_BADRESPONSETOOLARGE;
     if(res != UA_STATUSCODE_GOOD) {
         connection->releaseSendBuffer(channel->connection, &mc->messageBuffer);
@@ -612,7 +644,7 @@ sendSymmetricEncodingCallback(void *data, UA_Byte **buf_pos, const UA_Byte **buf
 
     /* Set a new buffer for the next chunk */
     UA_Connection *connection = mc->channel->connection;
-    retval = connection->getSendBuffer(connection, connection->localConf.sendBufferSize,
+    retval = connection->getSendBuffer(connection, connection->config.sendBufferSize,
                                        &mc->messageBuffer);
     if(retval != UA_STATUSCODE_GOOD)
         return retval;
@@ -643,13 +675,9 @@ UA_MessageContext_begin(UA_MessageContext *mc, UA_SecureChannel *channel,
     mc->messageBuffer = UA_BYTESTRING_NULL;
     mc->messageType = messageType;
 
-    /* Minimum required size */
-    if(connection->localConf.sendBufferSize <= UA_SECURE_MESSAGE_HEADER_LENGTH)
-        return UA_STATUSCODE_BADRESPONSETOOLARGE;
-
     /* Allocate the message buffer */
     UA_StatusCode retval =
-        connection->getSendBuffer(connection, connection->localConf.sendBufferSize,
+        connection->getSendBuffer(connection, connection->config.sendBufferSize,
                                   &mc->messageBuffer);
     if(retval != UA_STATUSCODE_GOOD)
         return retval;
@@ -723,80 +751,121 @@ UA_SecureChannel_sendSymmetricMessage(UA_SecureChannel *channel, UA_UInt32 reque
 /* Assemble Complete Message */
 /*****************************/
 
-static void
-UA_SecureChannel_removeChunks(UA_SecureChannel *channel, UA_UInt32 requestId) {
-    struct ChunkEntry *ch;
-    LIST_FOREACH(ch, &channel->chunks, pointers) {
-        if(ch->requestId == requestId) {
-            UA_ByteString_deleteMembers(&ch->bytes);
-            LIST_REMOVE(ch, pointers);
-            UA_free(ch);
-            return;
+static UA_StatusCode
+addChunkPayload(UA_SecureChannel *channel, UA_UInt32 requestId,
+                UA_MessageType messageType, UA_ByteString *chunkPayload,
+                UA_Boolean final) {
+    UA_Message *latest = TAILQ_LAST(&channel->messages, UA_MessageQueue);
+    if(latest) {
+        if(latest->requestId != requestId) {
+            /* Start of a new message */
+            if(!latest->final)
+                return UA_STATUSCODE_BADTCPMESSAGETYPEINVALID;
+            latest = NULL;
+        } else {
+            if(latest->messageType != messageType) /* MessageType mismatch */
+                return UA_STATUSCODE_BADTCPMESSAGETYPEINVALID;
+            if(latest->final) /* Correct message, but already finalized */
+                return UA_STATUSCODE_BADTCPMESSAGETYPEINVALID;
         }
     }
-}
 
-static UA_StatusCode
-appendChunk(struct ChunkEntry *chunkEntry, const UA_ByteString *chunkBody) {
-    UA_Byte *new_bytes = (UA_Byte *)
-        UA_realloc(chunkEntry->bytes.data, chunkEntry->bytes.length + chunkBody->length);
-    if(!new_bytes) {
-        UA_ByteString_deleteMembers(&chunkEntry->bytes);
-        return UA_STATUSCODE_BADOUTOFMEMORY;
+    /* Create a new message entry */
+    if(!latest) {
+        latest = (UA_Message*)UA_malloc(sizeof(UA_Message));
+        if(!latest)
+            return UA_STATUSCODE_BADOUTOFMEMORY;
+        memset(latest, 0, sizeof(UA_Message));
+        latest->requestId = requestId;
+        latest->messageType = messageType;
+        SIMPLEQ_INIT(&latest->chunkPayloads);
+        TAILQ_INSERT_TAIL(&channel->messages, latest, pointers);
     }
-    chunkEntry->bytes.data = new_bytes;
-    memcpy(&chunkEntry->bytes.data[chunkEntry->bytes.length], chunkBody->data, chunkBody->length);
-    chunkEntry->bytes.length += chunkBody->length;
+
+    /* Test against the connection settings */
+    const UA_ConnectionConfig *config = &channel->connection->config;
+    if(config->maxChunkCount > 0 && config->maxChunkCount <= latest->chunkPayloadsSize)
+        return UA_STATUSCODE_BADRESPONSETOOLARGE;
+    if(config->maxMessageSize > 0 && config->maxMessageSize < latest->messageSize + chunkPayload->length)
+        return UA_STATUSCODE_BADRESPONSETOOLARGE;
+
+    /* Create a new chunk entry */
+    UA_ChunkPayload* cp = (UA_ChunkPayload*)UA_malloc(sizeof(UA_ChunkPayload));
+    if(!cp)
+        return UA_STATUSCODE_BADOUTOFMEMORY;
+    cp->bytes = *chunkPayload;
+    cp->copied = false;
+
+    /* Add the chunk */
+    SIMPLEQ_INSERT_TAIL(&latest->chunkPayloads, cp, pointers);
+    latest->chunkPayloadsSize += 1;
+    latest->messageSize += chunkPayload->length;
+    latest->final = final;
+
     return UA_STATUSCODE_GOOD;
 }
 
 static UA_StatusCode
-UA_SecureChannel_appendChunk(UA_SecureChannel *channel, UA_UInt32 requestId,
-                             const UA_ByteString *chunkBody) {
-    struct ChunkEntry *ch;
-    LIST_FOREACH(ch, &channel->chunks, pointers) {
-        if(ch->requestId == requestId)
-            break;
-    }
-
-    /* No chunkentry on the channel, create one */
-    if(!ch) {
-        ch = (struct ChunkEntry *)UA_malloc(sizeof(struct ChunkEntry));
-        if(!ch)
+processMessage(UA_SecureChannel *channel, const UA_Message *message,
+               void *application, UA_ProcessMessageCallback callback) {
+    if(message->chunkPayloadsSize == 1) {
+        /* No need to combine chunks */
+        UA_ChunkPayload *cp = SIMPLEQ_FIRST(&message->chunkPayloads);
+        callback(application, channel, message->messageType, message->requestId, &cp->bytes);
+    } else {
+        /* Allocate memory */
+        UA_ByteString bytes;
+        bytes.data = (UA_Byte*) UA_malloc(message->messageSize);
+        if(!bytes.data) {
+            UA_LOG_WARNING(channel->securityPolicy->logger, UA_LOGCATEGORY_SECURECHANNEL,
+                           "Could not allocate the memory to assemble the message");
             return UA_STATUSCODE_BADOUTOFMEMORY;
-        ch->requestId = requestId;
-        UA_ByteString_init(&ch->bytes);
-        LIST_INSERT_HEAD(&channel->chunks, ch, pointers);
-    }
+        }
+        bytes.length = message->messageSize;
 
-    return appendChunk(ch, chunkBody);
+        /* Assemble the full message */
+        size_t curPos = 0;
+        UA_ChunkPayload *cp;
+        SIMPLEQ_FOREACH(cp, &message->chunkPayloads, pointers) {
+            memcpy(&bytes.data[curPos], cp->bytes.data, cp->bytes.length);
+            curPos += cp->bytes.length;
+        }
+
+        /* Process the message */
+        callback(application, channel, message->messageType, message->requestId, &bytes);
+        UA_ByteString_deleteMembers(&bytes);
+    }
+    return UA_STATUSCODE_GOOD;
 }
 
-static UA_StatusCode
-UA_SecureChannel_finalizeChunk(UA_SecureChannel *channel, UA_UInt32 requestId,
-                               const UA_ByteString *chunkBody, UA_MessageType messageType,
-                               UA_ProcessMessageCallback callback, void *application) {
-    struct ChunkEntry *chunkEntry;
-    LIST_FOREACH(chunkEntry, &channel->chunks, pointers) {
-        if(chunkEntry->requestId == requestId)
+UA_StatusCode
+UA_SecureChannel_processCompleteMessages(UA_SecureChannel *channel, void *application,
+                                         UA_ProcessMessageCallback callback) {
+    UA_Message *me, *me_tmp;
+    UA_StatusCode retval = UA_STATUSCODE_GOOD;
+    TAILQ_FOREACH_SAFE(me, &channel->messages, pointers, me_tmp) {
+        /* Stop at the first incomplete message */
+        if(!me->final)
             break;
-    }
 
-    UA_ByteString bytes;
-    if(!chunkEntry) {
-        bytes = *chunkBody;
-    } else {
-        UA_StatusCode retval = appendChunk(chunkEntry, chunkBody);
+        /* Remove the current message before processing */
+        TAILQ_REMOVE(&channel->messages, me, pointers);
+
+        /* Process */
+        retval = processMessage(channel, me, application, callback);
         if(retval != UA_STATUSCODE_GOOD)
-            return retval;
-        bytes = chunkEntry->bytes;
-        LIST_REMOVE(chunkEntry, pointers);
-        UA_free(chunkEntry);
-    }
+            break;
 
-    UA_StatusCode retval = callback(application, channel, messageType, requestId, &bytes);
-    if(chunkEntry)
-        UA_ByteString_deleteMembers(&bytes);
+        /* Clean up the message */
+        UA_ChunkPayload *cp;
+        while((cp = SIMPLEQ_FIRST(&me->chunkPayloads))) {
+            if(cp->copied)
+                UA_ByteString_deleteMembers(&cp->bytes);
+            SIMPLEQ_REMOVE_HEAD(&me->chunkPayloads, pointers);
+            UA_free(cp);
+        }
+        UA_free(me);
+    }
     return retval;
 }
 
@@ -804,10 +873,12 @@ UA_SecureChannel_finalizeChunk(UA_SecureChannel *channel, UA_UInt32 requestId,
 /* Process a received Chunk */
 /****************************/
 
+/* Sets the payload to a pointer inside the chunk buffer. Returns the requestId
+ * and the sequenceNumber */
 static UA_StatusCode
-decryptChunk(UA_SecureChannel *channel, const UA_SecurityPolicyCryptoModule *cryptoModule,
-             UA_ByteString *chunk, size_t offset, UA_UInt32 *requestId, UA_UInt32 *sequenceNumber,
-             UA_ByteString *payload, UA_MessageType messageType) {
+decryptChunk(const UA_SecureChannel *channel, const UA_SecurityPolicyCryptoModule *cryptoModule,
+             UA_MessageType messageType, const UA_ByteString *chunk, size_t offset,
+             UA_UInt32 *requestId, UA_UInt32 *sequenceNumber, UA_ByteString *payload) {
     UA_StatusCode retval = UA_STATUSCODE_GOOD;
     const UA_SecurityPolicy *securityPolicy = channel->securityPolicy;
     size_t chunkSizeAfterDecryption = chunk->length;
@@ -948,11 +1019,10 @@ checkSymHeader(UA_SecureChannel *const channel,
     return UA_STATUSCODE_GOOD;
 }
 
-UA_StatusCode
-UA_SecureChannel_processChunk(UA_SecureChannel *channel, UA_ByteString *chunk,
-                              UA_ProcessMessageCallback callback,
-                              void *application) {
-    /* Decode message header */
+/* The chunk body begins after the SecureConversationMessageHeader */
+static UA_StatusCode
+decryptAddChunk(UA_SecureChannel *channel, const UA_ByteString *chunk) {
+    /* Decode the MessageHeader */
     size_t offset = 0;
     UA_SecureConversationMessageHeader messageHeader;
     UA_StatusCode retval =
@@ -972,7 +1042,6 @@ UA_SecureChannel_processChunk(UA_SecureChannel *channel, UA_ByteString *chunk,
     UA_ChunkType chunkType = (UA_ChunkType)
         (messageHeader.messageHeader.messageTypeAndChunkType & UA_BITMASK_CHUNKTYPE);
 
-    /* ERR message (not encrypted) */
     UA_UInt32 requestId = 0;
     UA_UInt32 sequenceNumber = 0;
     UA_ByteString chunkPayload;
@@ -980,14 +1049,15 @@ UA_SecureChannel_processChunk(UA_SecureChannel *channel, UA_ByteString *chunk,
     UA_SequenceNumberCallback sequenceNumberCallback = NULL;
 
     switch(messageType) {
-    case UA_MESSAGETYPE_ERR: {
+        /* ERR message (not encrypted) */
+    case UA_MESSAGETYPE_ERR:
         if(chunkType != UA_CHUNKTYPE_FINAL)
             return UA_STATUSCODE_BADTCPMESSAGETYPEINVALID;
         chunkPayload.length = chunk->length - offset;
         chunkPayload.data = chunk->data + offset;
-        return callback(application, channel, messageType, requestId, &chunkPayload);
-    }
+        goto addPayload;
 
+        /* MSG and CLO: Symmetric encryption */
     case UA_MESSAGETYPE_MSG:
     case UA_MESSAGETYPE_CLO: {
         /* Decode and check the symmetric security header (tokenId) */
@@ -1011,6 +1081,8 @@ UA_SecureChannel_processChunk(UA_SecureChannel *channel, UA_ByteString *chunk,
         sequenceNumberCallback = processSequenceNumberSym;
         break;
     }
+
+        /* OPN: Asymmetric encryption */
     case UA_MESSAGETYPE_OPN: {
         /* Chunking not allowed for OPN */
         if(chunkType != UA_CHUNKTYPE_FINAL)
@@ -1034,42 +1106,84 @@ UA_SecureChannel_processChunk(UA_SecureChannel *channel, UA_ByteString *chunk,
         sequenceNumberCallback = processSequenceNumberAsym;
         break;
     }
-    default:return UA_STATUSCODE_BADTCPMESSAGETYPEINVALID;
+
+        /* Invalid message type */
+    default:
+        return UA_STATUSCODE_BADTCPMESSAGETYPEINVALID;
     }
 
     /* Decrypt message */
     UA_assert(cryptoModule != NULL);
-    retval = decryptChunk(channel, cryptoModule, chunk, offset, &requestId,
-                          &sequenceNumber, &chunkPayload, messageType);
+    retval = decryptChunk(channel, cryptoModule, messageType, chunk, offset, 
+                          &requestId, &sequenceNumber, &chunkPayload);
     if(retval != UA_STATUSCODE_GOOD)
         return retval;
 
-    /* Check the sequence number */
+#if !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+    /* Check the sequence number. Skip sequence number checking for fuzzer to
+     * improve coverage */
     if(sequenceNumberCallback == NULL)
         return UA_STATUSCODE_BADINTERNALERROR;
     retval = sequenceNumberCallback(channel, sequenceNumber);
-
-    /* Skip sequence number checking for fuzzer to improve coverage */
-    if(retval != UA_STATUSCODE_GOOD) {
-#if !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+    if(retval != UA_STATUSCODE_GOOD)
         return retval;
-#else
-        retval = UA_STATUSCODE_GOOD;
 #endif
-    }
 
-    /* Process the payload */
-    if(chunkType == UA_CHUNKTYPE_FINAL) {
-        retval = UA_SecureChannel_finalizeChunk(channel, requestId, &chunkPayload,
-                                                messageType, callback, application);
-    } else if(chunkType == UA_CHUNKTYPE_INTERMEDIATE) {
-        retval = UA_SecureChannel_appendChunk(channel, requestId, &chunkPayload);
-    } else if(chunkType == UA_CHUNKTYPE_ABORT) {
-        UA_SecureChannel_removeChunks(channel, requestId);
-    } else {
+    /* Add the payload to the (new) message */
+ addPayload:
+    switch(chunkType) {
+    case UA_CHUNKTYPE_INTERMEDIATE:
+    case UA_CHUNKTYPE_FINAL:
+        retval = addChunkPayload(channel, requestId, messageType,
+                                 &chunkPayload, chunkType == UA_CHUNKTYPE_FINAL);
+        break;
+    case UA_CHUNKTYPE_ABORT:
+        deleteLatestMessage(channel, requestId);
+        break;
+    default:
         retval = UA_STATUSCODE_BADTCPMESSAGETYPEINVALID;
     }
     return retval;
+}
+
+UA_StatusCode
+UA_SecureChannel_decryptAddChunk(UA_SecureChannel *channel, const UA_ByteString *chunk) {
+    /* Has the SecureChannel timed out? */
+    if(channel->state == UA_SECURECHANNELSTATE_CLOSED)
+        return UA_STATUSCODE_BADSECURECHANNELCLOSED;
+    if(channel->state == UA_SECURECHANNELSTATE_OPEN &&
+       (channel->securityToken.createdAt +
+        (channel->securityToken.revisedLifetime * UA_DATETIME_MSEC))
+       < UA_DateTime_nowMonotonic()) {
+        UA_SecureChannel_deleteMembersCleanup(channel);
+        return UA_STATUSCODE_BADSECURECHANNELCLOSED;
+    }
+
+    UA_StatusCode retval = decryptAddChunk(channel, chunk);
+    if(retval != UA_STATUSCODE_GOOD)
+        UA_SecureChannel_deleteMembersCleanup(channel);
+    return retval;
+}
+
+UA_StatusCode
+UA_SecureChannel_persistIncompleteMessages(UA_SecureChannel *channel) {
+    UA_Message *me;
+    TAILQ_FOREACH(me, &channel->messages, pointers) {
+        UA_ChunkPayload *cp;
+        SIMPLEQ_FOREACH(cp, &me->chunkPayloads, pointers) {
+            if(cp->copied)
+                continue;
+            UA_ByteString copy;
+            UA_StatusCode retval = UA_ByteString_copy(&cp->bytes, &copy);
+            if(retval != UA_STATUSCODE_GOOD) {
+                UA_SecureChannel_deleteMembersCleanup(channel);
+                return retval;
+            }
+            cp->bytes = copy;
+            cp->copied = true;
+        }
+    }
+    return UA_STATUSCODE_GOOD;
 }
 
 /* Functionality used by both the SecureChannel and the SecurityPolicy */

@@ -16,8 +16,8 @@
 #include "ua_securechannel.h"
 #include "ua_client_highlevel.h"
 #include "ua_client_subscriptions.h"
-#include "../../deps/queue.h"
 #include "ua_timer.h"
+#include "../../deps/queue.h"
 
 /**************************/
 /* Subscriptions Handling */
@@ -206,6 +206,9 @@ UA_Client_getEndpointsInternal(UA_Client *client,
  * timout finishes */
 UA_StatusCode
 receivePacketAsync(UA_Client *client);
+
+UA_StatusCode
+openSecureChannel(UA_Client *client, UA_Boolean renew);
 
 UA_StatusCode
 receiveServiceResponse(UA_Client *client, void *response,
