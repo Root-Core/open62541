@@ -151,7 +151,7 @@ historicalRead(UA_Server *server,
         if (UA_ByteString_equal(&node.continuationPoint, &UA_BYTESTRING_NULL)) {
             printf("Initial request\n");
 
-            /*UA_DataValue* dv = historyData->dataValues[0];
+            UA_DataValue* dv = UA_DataValue_new();
             dv->hasStatus = true;
             dv->status = UA_STATUSCODE_GOOD;
 
@@ -162,7 +162,8 @@ historicalRead(UA_Server *server,
             dv->hasValue = true;
             UA_Variant_setScalarCopy(&dv->value, &val, &UA_TYPES[UA_TYPES_FLOAT]);
 
-            historyData->dataValuesSize = 1;*/
+            historyData[0]->dataValues = dv;
+            historyData[0]->dataValuesSize = 1;
         }
         else {
             printf("Subsequent request\n");
