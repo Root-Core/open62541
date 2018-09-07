@@ -9,12 +9,13 @@
 #ifndef UA_PLUGIN_LOG_H_
 #define UA_PLUGIN_LOG_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdarg.h>
 #include "ua_config.h"
+#include "ua_types.h"
+#include "ua_types_generated_handling.h"
+#include "base64.h"
+
+_UA_BEGIN_DECLS
 
 /**
  * Logging Plugin API
@@ -107,20 +108,6 @@ UA_LOG_FATAL(UA_Logger logger, UA_LogCategory category, const char *msg, ...) {
 #endif
 }
 
-/**
- * Convenience macros for complex types
- * ------------------------------------ */
-#define UA_PRINTF_GUID_FORMAT "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x"
-#define UA_PRINTF_GUID_DATA(GUID) (GUID).data1, (GUID).data2, (GUID).data3, \
-        (GUID).data4[0], (GUID).data4[1], (GUID).data4[2], (GUID).data4[3], \
-        (GUID).data4[4], (GUID).data4[5], (GUID).data4[6], (GUID).data4[7]
-
-#define UA_PRINTF_STRING_FORMAT "\"%.*s\""
-#define UA_PRINTF_STRING_DATA(STRING) (int)(STRING).length, (STRING).data
-
-
-#ifdef __cplusplus
-} // extern "C"
-#endif
+_UA_END_DECLS
 
 #endif /* UA_PLUGIN_LOG_H_ */

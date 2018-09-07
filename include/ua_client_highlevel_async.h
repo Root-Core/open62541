@@ -2,14 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
+ *    Copyright 2018 (c) Thomas Stalder, Blue Time Concept SA
+ *    Copyright 2018 (c) Fraunhofer IOSB (Author: Julius Pfrommer)
  */
 
 #ifndef UA_CLIENT_HIGHLEVEL_ASYNC_H_
 #define UA_CLIENT_HIGHLEVEL_ASYNC_H_
+
 #include "ua_client.h"
 
-/*Raw Services
- * ^^^^^^^^^^^^^^ */
+_UA_BEGIN_DECLS
+
+/**
+ * Raw Services
+ * ^^^^^^^^^^^^ */
 typedef void (*UA_ClientAsyncReadCallback)(UA_Client *client, void *userdata,
 		UA_UInt32 requestId, UA_ReadResponse *rr);
 static UA_INLINE UA_StatusCode UA_Client_sendAsyncReadRequest(UA_Client *client,
@@ -467,7 +473,7 @@ static UA_INLINE UA_StatusCode UA_Client_writeUserExecutableAttribute_async(
 /**
  * Method Calling
  * ^^^^^^^^^^^^^^ */
-
+#ifdef UA_ENABLE_METHODCALLS
 UA_StatusCode UA_EXPORT __UA_Client_call_async(UA_Client *client,
 		const UA_NodeId objectId, const UA_NodeId methodId, size_t inputSize,
 		const UA_Variant *input, UA_ClientAsyncServiceCallback callback,
@@ -475,17 +481,19 @@ UA_StatusCode UA_EXPORT __UA_Client_call_async(UA_Client *client,
 
 typedef void (*UA_ClientAsyncCallCallback)(UA_Client *client, void *userdata,
 		UA_UInt32 requestId, UA_CallResponse *cr);
+
 static UA_INLINE UA_StatusCode UA_Client_call_async(UA_Client *client,
 		const UA_NodeId objectId, const UA_NodeId methodId, size_t inputSize,
 		const UA_Variant *input, UA_ClientAsyncCallCallback callback,
 		void *userdata, UA_UInt32 *reqId) {
-
 	return __UA_Client_call_async(client, objectId, methodId, inputSize, input,
 			(UA_ClientAsyncServiceCallback) callback, userdata, reqId);
 }
+#endif
 
-/*Node Management
- * ^^^^^^^^^^^^^*/
+/**
+ * Node Management
+ * ^^^^^^^^^^^^^^^ */
 typedef void (*UA_ClientAsyncAddNodesCallback)(UA_Client *client,
 		void *userdata, UA_UInt32 requestId, UA_AddNodesResponse *ar);
 
@@ -606,9 +614,10 @@ static UA_INLINE UA_StatusCode UA_Client_addMethodNode_async(UA_Client *client,
 
 /**
  * Misc Functionalities
- * ^^^^^^^^^^^^^^ */
+ * ^^^^^^^^^^^^^^^^^^^^ */
 
-UA_StatusCode UA_EXPORT __UA_Client_translateBrowsePathsToNodeIds_async(
+UA_StatusCode UA_EXPORT
+__UA_Client_translateBrowsePathsToNodeIds_async(
 		UA_Client *client, char *paths[], UA_UInt32 ids[], size_t pathSize,
 		UA_ClientAsyncServiceCallback callback, void *userdata,
 		UA_UInt32 *reqId);
@@ -616,6 +625,7 @@ UA_StatusCode UA_EXPORT __UA_Client_translateBrowsePathsToNodeIds_async(
 typedef void (*UA_ClientAsyncTranslateCallback)(UA_Client *client,
 		void *userdata, UA_UInt32 requestId,
 		UA_TranslateBrowsePathsToNodeIdsResponse *tr);
+
 static UA_INLINE UA_StatusCode UA_Cient_translateBrowsePathsToNodeIds_async(
 		UA_Client *client, char **paths, UA_UInt32 *ids, size_t pathSize,
 		UA_ClientAsyncTranslateCallback callback, void *userdata,
@@ -624,5 +634,6 @@ static UA_INLINE UA_StatusCode UA_Cient_translateBrowsePathsToNodeIds_async(
 			pathSize, (UA_ClientAsyncServiceCallback) callback, userdata, reqId);
 }
 
+_UA_END_DECLS
 
 #endif /* UA_CLIENT_HIGHLEVEL_ASYNC_H_ */

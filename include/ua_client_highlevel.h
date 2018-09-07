@@ -13,11 +13,9 @@
 #ifndef UA_CLIENT_HIGHLEVEL_H_
 #define UA_CLIENT_HIGHLEVEL_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "ua_client.h"
+
+_UA_BEGIN_DECLS
 
 /**
  * .. _client-highlevel:
@@ -395,10 +393,12 @@ UA_Client_writeUserExecutableAttribute(UA_Client *client, const UA_NodeId nodeId
 /**
  * Method Calling
  * ^^^^^^^^^^^^^^ */
+#ifdef UA_ENABLE_METHODCALLS
 UA_StatusCode UA_EXPORT
 UA_Client_call(UA_Client *client, const UA_NodeId objectId,
                const UA_NodeId methodId, size_t inputSize, const UA_Variant *input,
                size_t *outputSize, UA_Variant **output);
+#endif
 
 /**
  * Node Management
@@ -588,8 +588,6 @@ UA_StatusCode UA_EXPORT
 UA_Client_forEachChildNodeCall(UA_Client *client, UA_NodeId parentNodeId,
                                UA_NodeIteratorCallback callback, void *handle) ;
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
+_UA_END_DECLS
 
 #endif /* UA_CLIENT_HIGHLEVEL_H_ */

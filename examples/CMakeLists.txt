@@ -2,6 +2,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/plugins)
 include_directories(${PROJECT_BINARY_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/examples)
+include_directories(${PROJECT_SOURCE_DIR}/arch)
 
 set(examples_headers
     ${examples_headers}
@@ -110,12 +111,12 @@ endif()
 
 if(UA_BUILD_SELFSIGNED_CERTIFICATE)
   find_package(OpenSSL REQUIRED)
-  add_custom_command(OUTPUT server_cert.der ca.crt
+  add_custom_command(OUTPUT server_cert.der
                      COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/certs/create_self-signed.py ${CMAKE_CURRENT_BINARY_DIR}
                      DEPENDS ${PROJECT_SOURCE_DIR}/tools/certs/create_self-signed.py
                              ${PROJECT_SOURCE_DIR}/tools/certs/localhost.cnf)
-  add_custom_target(selfsigned ALL DEPENDS server_cert.der ca.crt)
-  add_executable(server_certificate server_certificate.c ${STATIC_OBJECTS} server_cert.der ca.crt)
+  add_custom_target(selfsigned ALL DEPENDS server_cert.der)
+  add_executable(server_certificate server_certificate.c ${STATIC_OBJECTS} server_cert.der)
   target_link_libraries(server_certificate open62541 ${open62541_LIBRARIES})
 endif()
 

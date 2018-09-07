@@ -14,22 +14,20 @@
 #ifndef UA_SERVER_H_
 #define UA_SERVER_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "ua_types.h"
 #include "ua_types_generated.h"
 #include "ua_types_generated_handling.h"
 #include "ua_nodeids.h"
 
+_UA_BEGIN_DECLS
+
+/* Forward declarations */
 struct UA_ServerConfig;
 typedef struct UA_ServerConfig UA_ServerConfig;
 
 struct UA_Server;
 typedef struct UA_Server UA_Server;
 
-struct UA_ClientConfig;
 struct UA_Client;
 
 /**
@@ -405,6 +403,15 @@ UA_Server_writeMinimumSamplingInterval(UA_Server *server, const UA_NodeId nodeId
                              UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL,
                              &UA_TYPES[UA_TYPES_DOUBLE],
                              &miniumSamplingInterval);
+}
+
+static UA_INLINE UA_StatusCode
+UA_Server_writeHistorizing(UA_Server *server, const UA_NodeId nodeId,
+                          const UA_Boolean historizing) {
+    return __UA_Server_write(server, &nodeId,
+                             UA_ATTRIBUTEID_HISTORIZING,
+                             &UA_TYPES[UA_TYPES_BOOLEAN],
+                             &historizing);
 }
 
 static UA_INLINE UA_StatusCode
@@ -797,6 +804,8 @@ UA_Server_setVariableNode_valueCallback(UA_Server *server,
  * also be registered locally. Notifications are then forwarded to a
  * user-defined callback instead of a remote client. */
 
+#ifdef UA_ENABLE_SUBSCRIPTIONS
+
 typedef void (*UA_Server_DataChangeNotificationCallback)
     (UA_Server *server, UA_UInt32 monitoredItemId, void *monitoredItemContext,
      const UA_NodeId *nodeId, void *nodeContext, UA_UInt32 attributeId,
@@ -836,6 +845,8 @@ UA_Server_createDataChangeMonitoredItem(UA_Server *server,
 
 UA_StatusCode UA_EXPORT
 UA_Server_deleteMonitoredItem(UA_Server *server, UA_UInt32 monitoredItemId);
+
+#endif
 
 /**
  * Method Callbacks
@@ -1196,8 +1207,10 @@ UA_Server_deleteReference(UA_Server *server, const UA_NodeId sourceNodeId,
  * The method ``UA_Server_createEvent`` creates an event and represents it as node. The node receives a unique `EventId`
  * which is automatically added to the node.
  * The method returns a `NodeId` to the object node which represents the event through ``outNodeId``. The `NodeId` can
- * be used to set the attributes of the event. The generated `NodeId` is always numeric. ``outNodeId`` cannot be 
+ * be used to set the attributes of the event. The generated `NodeId` is always numeric. ``outNodeId`` cannot be
  * ``NULL``.
+ *
+ * Note: In order to see an event in UAExpert, the field `Time` must be given a value!
  *
  * The method ``UA_Server_triggerEvent`` "triggers" an event by adding it to all monitored items of the specified
  * origin node and those of all its parents. Any filters specified by the monitored items are automatically applied.
@@ -1245,13 +1258,14 @@ UA_Server_triggerEvent(UA_Server *server, const UA_NodeId eventNodeId, const UA_
 /* Add a new namespace to the server. Returns the index of the new namespace */
 UA_UInt16 UA_EXPORT UA_Server_addNamespace(UA_Server *server, const char* name);
 
+UA_ServerConfig*
+UA_Server_getConfig(UA_Server *server);
+
 /* Get namespace by name from the server. */
 UA_StatusCode UA_EXPORT
 UA_Server_getNamespaceByName(UA_Server *server, const UA_String namespaceUri,
                              size_t* foundIndex);
 
-#ifdef __cplusplus
-}
-#endif
+_UA_END_DECLS
 
 #endif /* UA_SERVER_H_ */

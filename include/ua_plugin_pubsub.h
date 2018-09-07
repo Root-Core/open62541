@@ -8,11 +8,11 @@
 #ifndef UA_PLUGIN_PUBSUB_H_
 #define UA_PLUGIN_PUBSUB_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "ua_server_pubsub.h"
+
+_UA_BEGIN_DECLS
+
+#ifdef UA_ENABLE_PUBSUB
 
 /**
  * .. _pubsub_connection:
@@ -42,13 +42,13 @@ typedef enum {
 struct UA_PubSubChannel;
 typedef struct UA_PubSubChannel UA_PubSubChannel;
 
-//interface structure between network plugin and internal implementation
-struct UA_PubSubChannel{
-    UA_UInt32 publisherId;                                  // unique identifier
+/* Interface structure between network plugin and internal implementation */
+struct UA_PubSubChannel {
+    UA_UInt32 publisherId; /* unique identifier */
     UA_PubSubChannelState state;
-    UA_PubSubConnectionConfig *connectionConfig;            //link to parent connection config
-    UA_Int32 sockfd;
-    void *handle;                                           //implementation specific data
+    UA_PubSubConnectionConfig *connectionConfig; /* link to parent connection config */
+    UA_SOCKET sockfd;
+    void *handle; /* implementation specific data */
     /*@info for handle: each network implementation should provide an structure
     * UA_PubSubChannelData[ImplementationName] This structure can be used by the
     * network implementation to store network implementation specific data.*/
@@ -72,7 +72,6 @@ struct UA_PubSubChannel{
 };
 
 /**
- *
  * The UA_PubSubTransportLayer is used for the creation of new connections. Whenever on runtime a new
  * connection is request, the internal PubSub implementation call * the 'createPubSubChannel' function.
  * The 'transportProfileUri' contains the standard defined transport profile information
@@ -81,13 +80,13 @@ struct UA_PubSubChannel{
  * Take a look in the tutorial_pubsub_connection to get informations about the TransportLayer handling.
  */
 
-typedef struct UA_PubSubTransportLayer{
+typedef struct {
     UA_String transportProfileUri;
     UA_PubSubChannel * (*createPubSubChannel)(UA_PubSubConnectionConfig *connectionConfig);
 } UA_PubSubTransportLayer;
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
+#endif /* UA_ENABLE_PUBSUB */
+
+_UA_END_DECLS
 
 #endif /* UA_PLUGIN_PUBSUB_H_ */
