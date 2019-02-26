@@ -668,6 +668,26 @@ UA_Client_connect_async(UA_Client *client, const char *endpointUrl,
     return retval;
 }
 
+UA_StatusCode
+UA_Client_connect_username_async(UA_Client *client, const char *endpointUrl,
+                                 const char *username, const char *password,
+                                 UA_ClientAsyncServiceCallback callback,
+                                 void *userdata) {
+    if (client->state >= UA_CLIENTSTATE_WAITING_FOR_ACK)
+        return UA_STATUSCODE_GOOD;
+
+    UA_UserNameIdentityToken* identityToken = UA_UserNameIdentityToken_new();
+    if (!identityToken)
+        return UA_STATUSCODE_BADOUTOFMEMORY;
+    identityToken->userName = UA_STRING_ALLOC(username);
+    identityToken->password = UA_STRING_ALLOC(password);
+    UA_ExtensionObject_deleteMembers(&client->config.userIdentityToken);
+    client->config.userIdentityToken.encoding = UA_EXTENSIONOBJECT_DECODED;
+    client->config.userIdentityToken.content.decoded.type = &UA_TYPES[UA_TYPES_USERNAMEIDENTITYTOKEN];
+    client->config.userIdentityToken.content.decoded.data = identityToken;
+    return UA_Client_connect_async(client, endpointUrl, callback, userdata);
+}
+
 /* Async disconnection */
 static void
 sendCloseSecureChannelAsync(UA_Client *client, void *userdata,

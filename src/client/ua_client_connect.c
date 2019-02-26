@@ -936,6 +936,9 @@ UA_Client_connect_noSession(UA_Client *client, const char *endpointUrl) {
 UA_StatusCode
 UA_Client_connect_username(UA_Client *client, const char *endpointUrl,
                            const char *username, const char *password) {
+    if (client->state >= UA_CLIENTSTATE_CONNECTED)
+        return UA_STATUSCODE_GOOD;
+
     UA_UserNameIdentityToken* identityToken = UA_UserNameIdentityToken_new();
     if(!identityToken)
         return UA_STATUSCODE_BADOUTOFMEMORY;

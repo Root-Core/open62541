@@ -117,6 +117,12 @@ UA_StatusCode UA_EXPORT
 UA_Client_connect_username(UA_Client *client, const char *endpointUrl,
                            const char *username, const char *password);
 
+UA_StatusCode UA_EXPORT
+UA_Client_connect_username_async(UA_Client *client, const char *endpointUrl,
+                                 const char *username, const char *password,
+                                 UA_ClientAsyncServiceCallback callback,
+                                 void *connected);
+
 /* Disconnect and close a connection to the selected server */
 UA_StatusCode UA_EXPORT
 UA_Client_disconnect(UA_Client *client);
