@@ -11,9 +11,9 @@
 #ifndef UA_CONSTANTS_H_
 #define UA_CONSTANTS_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "ua_config.h"
+
+_UA_BEGIN_DECLS
 
 /**
  * Standard-Defined Constants
@@ -96,8 +96,21 @@ typedef enum {
 #define UA_WRITEMASK_WRITEMASK               (0x01<<20)
 #define UA_WRITEMASK_VALUEFORVARIABLETYPE    (0x01<<21)
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
+/**
+ * ValueRanks
+ * ----------
+ * The following are the most common ValueRanks used for Variables,
+ * VariableTypes and method arguments. ValueRanks higher than 3 are valid as
+ * well (but less common). */
+
+#define UA_VALUERANK_SCALAR_OR_ONE_DIMENSION  -3
+#define UA_VALUERANK_ANY                      -2
+#define UA_VALUERANK_SCALAR                   -1
+#define UA_VALUERANK_ONE_OR_MORE_DIMENSIONS    0
+#define UA_VALUERANK_ONE_DIMENSION             1
+#define UA_VALUERANK_TWO_DIMENSIONS            2
+#define UA_VALUERANK_THREE_DIMENSIONS          3
+
+_UA_END_DECLS
 
 #endif /* UA_CONSTANTS_H_ */

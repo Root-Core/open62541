@@ -19,7 +19,6 @@ if (UA_BUILD_FUZZING_CORPUS)
     add_executable(corpus_generator ua_debug_dump_pkgs_file.c corpus_generator.c)
     target_link_libraries(corpus_generator open62541 ${open62541_LIBRARIES})
     assign_source_group(corpus_generator)
-    add_dependencies(corpus_generator open62541-amalgamation-header)
     set_target_properties(corpus_generator PROPERTIES FOLDER "open62541/corpus_generator")
     set_target_properties(corpus_generator PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
     return()
@@ -52,7 +51,7 @@ endif()
 list(APPEND LIBS "${open62541_LIBRARIES}")
 
 # Use different plugins for testing
-set(fuzzing_plugin_sources ${PROJECT_SOURCE_DIR}/plugins/ua_network_tcp.c
+set(fuzzing_plugin_sources ${PROJECT_SOURCE_DIR}/arch/ua_network_tcp.c
         ${PROJECT_SOURCE_DIR}/tests/testing-plugins/testing_clock.c
         ${PROJECT_SOURCE_DIR}/tests/testing-plugins/testing_networklayers.c
         ${PROJECT_SOURCE_DIR}/plugins/ua_log_stdout.c
@@ -60,17 +59,19 @@ set(fuzzing_plugin_sources ${PROJECT_SOURCE_DIR}/plugins/ua_network_tcp.c
         ${PROJECT_SOURCE_DIR}/plugins/ua_nodestore_default.c
         ${PROJECT_SOURCE_DIR}/plugins/ua_accesscontrol_default.c
         ${PROJECT_SOURCE_DIR}/plugins/ua_pki_certificate.c
-        ${PROJECT_SOURCE_DIR}/plugins/ua_securitypolicy_none.c
+        ${PROJECT_SOURCE_DIR}/plugins/securityPolicies/ua_securitypolicy_none.c
 )
 
 if(UA_ENABLE_ENCRYPTION)
     set(fuzzing_plugin_sources ${fuzzing_plugin_sources}
-        ${PROJECT_SOURCE_DIR}/plugins/ua_securitypolicy_basic128rsa15.c)
+        ${PROJECT_SOURCE_DIR}/plugins/securityPolicies/ua_securitypolicy_basic128rsa15.c)
     set(fuzzing_plugin_sources ${fuzzing_plugin_sources}
-        ${PROJECT_SOURCE_DIR}/plugins/ua_securitypolicy_basic256sha256.c)
+        ${PROJECT_SOURCE_DIR}/plugins/securityPolicies/ua_securitypolicy_basic256sha256.c)
 endif()
 
-add_library(open62541-fuzzplugins OBJECT ${fuzzing_plugin_sources})
+add_library(open62541-fuzzplugins OBJECT
+            ${fuzzing_plugin_sources}
+            ${PROJECT_SOURCE_DIR}/arch/${UA_ARCHITECTURE}/ua_architecture_functions.c)
 add_dependencies(open62541-fuzzplugins open62541)
 
 # the fuzzer test are built directly on the open62541 object files. so they can
@@ -89,6 +90,12 @@ endmacro()
 # Add new fuzzers here
 add_fuzzer(fuzz_binary_message fuzz_binary_message.cc)
 add_fuzzer(fuzz_binary_decode fuzz_binary_decode.cc)
+add_fuzzer(fuzz_src_ua_util fuzz_src_ua_util.cc)
+
+if(UA_ENABLE_JSON_ENCODING)
+    add_fuzzer(fuzz_json_decode fuzz_json_decode.cc)
+    add_fuzzer(fuzz_json_decode_encode fuzz_json_decode_encode.cc)
+endif()
 
 file(GLOB CORPUS_FILES ${PROJECT_SOURCE_DIR}/tests/fuzz/fuzz_binary_message_corpus/generated/*)
 

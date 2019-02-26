@@ -9,11 +9,14 @@
 #ifndef UA_CLIENT_CONFIG_H
 #define UA_CLIENT_CONFIG_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+#include "ua_config.h"
+#include "ua_plugin_securitypolicy.h"
 #include "ua_plugin_network.h"
+
+_UA_BEGIN_DECLS
+
+struct UA_Client;
+typedef struct UA_Client UA_Client;
 
 /**
  * .. _client-config:
@@ -46,107 +49,89 @@ typedef enum {
     UA_CLIENTSTATE_SESSION_RENEWED       /* A session with the server is open (renewed) */
 } UA_ClientState;
 
+typedef struct {
+    /* Basic client configuration */
+    void *clientContext; /* User-defined data attached to the client */
+    UA_Logger logger;   /* Logger used by the client */
+    UA_UInt32 timeout;  /* Response timeout in ms */
+    UA_ApplicationDescription clientDescription;
 
-struct UA_Client;
-typedef struct UA_Client UA_Client;
+    /* Basic connection configuration */
+    UA_ExtensionObject userIdentityToken; /* Configured User-Identity Token */
+    UA_MessageSecurityMode securityMode;  /* None, Sign, SignAndEncrypt. The
+                                           * default is invalid. This indicates
+                                           * the client to select any matching
+                                           * endpoint. */
+    UA_String securityPolicyUri; /* SecurityPolicy for the SecureChannel. An
+                                  * empty string indicates the client to select
+                                  * any matching SecurityPolicy. */
 
-typedef void (*UA_ClientAsyncServiceCallback)(UA_Client *client, void *userdata,
-        UA_UInt32 requestId, void *response);
-/*
- * Repeated Callbacks
- * ------------------ */
-typedef UA_StatusCode (*UA_ClientCallback)(UA_Client *client, void *data);
+    /* Advanced connection configuration
+     *
+     * If either endpoint or userTokenPolicy has been set (at least one non-zero
+     * byte in either structure), then the selected Endpoint and UserTokenPolicy
+     * overwrite the settings in the basic connection configuration. The
+     * userTokenPolicy array in the EndpointDescription is ignored. The selected
+     * userTokenPolicy is set in the dedicated configuration field.
+     *
+     * If the advanced configuration is not set, the client will write to it the
+     * selected Endpoint and UserTokenPolicy during GetEndpoints.
+     *
+     * The information in the advanced configuration is used during reconnect
+     * when the SecureChannel was broken. */
+    UA_EndpointDescription endpoint;
+    UA_UserTokenPolicy userTokenPolicy;
 
-UA_StatusCode
-UA_Client_addRepeatedCallback(UA_Client *Client, UA_ClientCallback callback,
-        void *data, UA_UInt32 interval, UA_UInt64 *callbackId);
+    /* Advanced client configuration */
 
-UA_StatusCode
-UA_Client_changeRepeatedCallbackInterval(UA_Client *Client,
-        UA_UInt64 callbackId, UA_UInt32 interval);
-
-UA_StatusCode UA_Client_removeRepeatedCallback(UA_Client *Client,
-        UA_UInt64 callbackId);
-
-/**
- * Client Lifecycle callback
- * ^^^^^^^^^^^^^^^^^^^^^^^^^ */
-
-typedef void (*UA_ClientStateCallback)(UA_Client *client, UA_ClientState clientState);
-
-/**
- * Subscription Inactivity callback
- * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
-
-#ifdef UA_ENABLE_SUBSCRIPTIONS
-typedef void (*UA_SubscriptionInactivityCallback)(UA_Client *client, UA_UInt32 subscriptionId, void *subContext);
-#endif
-
-/**
- * Inactivity callback
- * ^^^^^^^^^^^^^^^^^^^ */
-
-typedef void (*UA_InactivityCallback)(UA_Client *client);
-
-/**
- * Client Configuration Data
- * ^^^^^^^^^^^^^^^^^^^^^^^^^ */
-
-typedef struct UA_ClientConfig {
-    UA_UInt32 timeout;               /* ASync + Sync response timeout in ms */
     UA_UInt32 secureChannelLifeTime; /* Lifetime in ms (then the channel needs
                                         to be renewed) */
-    UA_Logger logger;
+    UA_UInt32 requestedSessionTimeout; /* Session timeout in ms */
     UA_ConnectionConfig localConnectionConfig;
+    UA_UInt32 connectivityCheckInterval;     /* Connectivity check interval in ms.
+                                              * 0 = background task disabled */
+    const UA_DataTypeArray *customDataTypes; /* Custom DataTypes. Attention!
+                                              * Custom datatypes are not cleaned
+                                              * up together with the
+                                              * configuration. So it is possible
+                                              * to allocate them on ROM. */
+
+    /* Available SecurityPolicies */
+    size_t securityPoliciesSize;
+    UA_SecurityPolicy *securityPolicies;
+
+    /* Certificate Verification Plugin */
+    UA_CertificateVerification certificateVerification;
+
+    /* Callbacks for async connection handshakes */
     UA_ConnectClientConnection connectionFunc;
     UA_ConnectClientConnection initConnectionFunc;
-    UA_ClientCallback pollConnectionFunc;
+    void (*pollConnectionFunc)(UA_Client *client, void *context);
 
-    /* Custom DataTypes */
-    size_t customDataTypesSize;
-    const UA_DataType *customDataTypes;
+    /* Callback for state changes */
+    void (*stateCallback)(UA_Client *client, UA_ClientState clientState);
 
-    /* Callback function */
-    UA_ClientStateCallback stateCallback;
-#ifdef UA_ENABLE_SUBSCRIPTIONS
-    /**
-     * When outStandingPublishRequests is greater than 0,
-     * the server automatically create publishRequest when
-     * UA_Client_runAsync is called. If the client don't receive
-     * a publishResponse after :
-     *     (sub->publishingInterval * sub->maxKeepAliveCount) +
-     *     client->config.timeout)
-     * then, the client call subscriptionInactivityCallback
-     * The connection can be closed, this in an attempt to
-     * recreate a healthy connection. */
-    UA_SubscriptionInactivityCallback subscriptionInactivityCallback;
-#endif
-
-    /** 
-     * When connectivityCheckInterval is greater than 0,
-     * every connectivityCheckInterval (in ms), a async read request
-     * is performed on the server. inactivityCallback is called
-     * when the client receive no response for this read request
-     * The connection can be closed, this in an attempt to
-     * recreate a healthy connection. */
-    UA_InactivityCallback inactivityCallback;
-
-    void *clientContext;
+    /* When connectivityCheckInterval is greater than 0, every
+     * connectivityCheckInterval (in ms), a async read request is performed on
+     * the server. inactivityCallback is called when the client receive no
+     * response for this read request The connection can be closed, this in an
+     * attempt to recreate a healthy connection. */
+    void (*inactivityCallback)(UA_Client *client);
 
 #ifdef UA_ENABLE_SUBSCRIPTIONS
-    /* number of PublishResponse standing in the sever */
-    /* 0 = background task disabled                    */
+    /* Number of PublishResponse queued up in the server */
     UA_UInt16 outStandingPublishRequests;
+
+    /* If the client does not receive a PublishResponse after the defined delay
+     * of ``(sub->publishingInterval * sub->maxKeepAliveCount) +
+     * client->config.timeout)``, then subscriptionInactivityCallback is called
+     * for the subscription.. */
+    void (*subscriptionInactivityCallback)(UA_Client *client,
+                                           UA_UInt32 subscriptionId,
+                                           void *subContext);
 #endif
-   /**
-     * connectivity check interval in ms
-     * 0 = background task disabled */
-    UA_UInt32 connectivityCheckInterval;
 } UA_ClientConfig;
 
-#ifdef __cplusplus
-}
-#endif
-
+_UA_END_DECLS
 
 #endif /* UA_CLIENT_CONFIG_H */

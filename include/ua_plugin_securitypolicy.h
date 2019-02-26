@@ -10,19 +10,21 @@
 #ifndef UA_PLUGIN_SECURITYPOLICY_H_
 #define UA_PLUGIN_SECURITYPOLICY_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "ua_types.h"
 #include "ua_types_generated.h"
 #include "ua_plugin_log.h"
 #include "ua_plugin_pki.h"
 
+_UA_BEGIN_DECLS
+
 extern const UA_ByteString UA_SECURITY_POLICY_NONE_URI;
 
 struct UA_SecurityPolicy;
 typedef struct UA_SecurityPolicy UA_SecurityPolicy;
+
+/**
+ * SecurityPolicy Interface Definition
+ * ----------------------------------- */
 
 typedef struct {
     UA_String uri;
@@ -352,16 +354,17 @@ struct UA_SecurityPolicy {
     UA_SecurityPolicyChannelModule channelModule;
     UA_CertificateVerification *certificateVerification;
 
-    UA_Logger logger;
+    const UA_Logger *logger;
+
+    /*Updates the ApplicationInstanceCertificate and the corresponding
+    * private key at runtime. */
+    UA_StatusCode (*updateCertificateAndPrivateKey)(UA_SecurityPolicy *policy,
+                                                    const UA_ByteString newCertificate,
+                                                    const UA_ByteString newPrivateKey);
 
     /* Deletes the dynamic content of the policy */
     void (*deleteMembers)(UA_SecurityPolicy *policy);
 };
-
-typedef struct {
-    UA_SecurityPolicy securityPolicy;
-    UA_EndpointDescription endpointDescription;
-} UA_Endpoint;
 
 /* Gets the number of bytes that are needed by the encryption function in
  * addition to the length of the plaintext message. This is needed, since
@@ -378,15 +381,15 @@ UA_SecurityPolicy_getRemoteAsymEncryptionBufferLengthOverhead(const UA_SecurityP
                                                               const void *channelContext,
                                                               size_t maxEncryptionLength);
 
+/* Gets the a pointer to the context of a security policy supported by the
+ * server matched by the security policy uri.
+ *
+ * @param server the server context.
+ * @param securityPolicyUri the security policy to get the context of. */
+UA_SecurityPolicy *
+UA_SecurityPolicy_getSecurityPolicyByUri(const UA_Server *server,
+                                         UA_ByteString *securityPolicyUri);
 
-typedef UA_StatusCode (*UA_SecurityPolicy_Func)(UA_SecurityPolicy *policy,
-                                                UA_CertificateVerification *certificateVerification,
-                                                const UA_ByteString localCertificate,
-                                                const UA_ByteString localPrivateKey,
-                                                UA_Logger logger);
-
-#ifdef __cplusplus
-}
-#endif
+_UA_END_DECLS
 
 #endif /* UA_PLUGIN_SECURITYPOLICY_H_ */

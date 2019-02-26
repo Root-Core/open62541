@@ -2,32 +2,22 @@
 *  License, v. 2.0. If a copy of the MPL was not distributed with this
 *  file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#if !defined(_XOPEN_SOURCE) && !defined(_WRS_KERNEL)
-# define _XOPEN_SOURCE 500
-#endif
-#ifndef _DEFAULT_SOURCE
-# define _DEFAULT_SOURCE
-#endif
-
-// On older systems we need to define _BSD_SOURCE
-// _DEFAULT_SOURCE is an alias for that
-#ifndef _BSD_SOURCE
-# define _BSD_SOURCE
-#endif
-
-#include <stdio.h>
-#include <fcntl.h>
-#include <check.h>
-#ifndef _WIN32
-#include <unistd.h>
-#endif
-
 #include "server/ua_server_internal.h"
 #include "ua_client.h"
 #include "ua_config_default.h"
 #include "ua_network_tcp.h"
 #include "testing_clock.h"
 #include "thread_wrapper.h"
+
+#include <fcntl.h>
+#ifndef WIN32
+#include <sys/stat.h>
+#endif
+#include <check.h>
+
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
 
 // set register timeout to 1 second so we are able to test it.
 #define registerTimeout 1
@@ -122,8 +112,9 @@ static void teardown_register(void) {
 }
 
 START_TEST(Server_register) {
-    UA_Client *clientRegister = UA_Client_new(UA_ClientConfig_default);
-    ck_assert(clientRegister != NULL);
+    UA_Client *clientRegister = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(clientRegister));
+
     UA_StatusCode retval = UA_Client_connect_noSession(clientRegister, "opc.tcp://localhost:4840");
     ck_assert_uint_eq(retval, UA_STATUSCODE_GOOD);
     retval = UA_Server_register_discovery(server_register, clientRegister , NULL);
@@ -134,8 +125,9 @@ START_TEST(Server_register) {
 END_TEST
 
 START_TEST(Server_unregister) {
-    UA_Client *clientRegister = UA_Client_new(UA_ClientConfig_default);
-    ck_assert(clientRegister != NULL);
+    UA_Client *clientRegister = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(clientRegister));
+
     UA_StatusCode retval = UA_Client_connect_noSession(clientRegister, "opc.tcp://localhost:4840");
     ck_assert_uint_eq(retval, UA_STATUSCODE_GOOD);
     retval = UA_Server_unregister_discovery(server_register, clientRegister);
@@ -163,8 +155,10 @@ START_TEST(Server_register_semaphore) {
     ck_assert_ptr_ne(fp, NULL);
     fclose(fp);
 #endif
-    UA_Client *clientRegister = UA_Client_new(UA_ClientConfig_default);
-    ck_assert(clientRegister != NULL);
+
+    UA_Client *clientRegister = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(clientRegister));
+
     UA_StatusCode retval = UA_Client_connect_noSession(clientRegister, "opc.tcp://localhost:4840");
     ck_assert_uint_eq(retval, UA_STATUSCODE_GOOD);
     retval = UA_Server_register_discovery(server_register, clientRegister, SEMAPHORE_PATH);
@@ -182,7 +176,10 @@ END_TEST
 
 START_TEST(Server_register_periodic) {
     ck_assert(clientRegisterRepeated == NULL);
-    clientRegisterRepeated = UA_Client_new(UA_ClientConfig_default);
+
+    clientRegisterRepeated = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(clientRegisterRepeated));
+
     ck_assert(clientRegisterRepeated != NULL);
     // periodic register every minute, first register immediately
     UA_StatusCode retval = UA_Server_addPeriodicServerRegisterCallback(server_register, clientRegisterRepeated, "opc.tcp://localhost:4840",
@@ -210,7 +207,8 @@ FindAndCheck(const UA_String expectedUris[], size_t expectedUrisSize,
              const UA_String expectedNames[],
              const char *filterUri,
              const char *filterLocale) {
-    UA_Client *client = UA_Client_new(UA_ClientConfig_default);
+    UA_Client *client = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(client));
 
     UA_ApplicationDescription* applicationDescriptionArray = NULL;
     size_t applicationDescriptionArraySize = 0;
@@ -276,11 +274,11 @@ static void
 FindOnNetworkAndCheck(UA_String expectedServerNames[], size_t expectedServerNamesSize,
                       const char *filterUri, const char *filterLocale,
                       const char** filterCapabilities, size_t filterCapabilitiesSize) {
-    UA_Client *client = UA_Client_new(UA_ClientConfig_default);
+    UA_Client *client = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(client));
 
     UA_ServerOnNetwork* serverOnNetwork = NULL;
     size_t serverOnNetworkSize = 0;
-
 
     size_t  serverCapabilityFilterSize = 0;
     UA_String *serverCapabilityFilter = NULL;
@@ -365,7 +363,8 @@ GetEndpoints(UA_Client *client, const UA_String* endpointUrl,
 static void
 GetEndpointsAndCheck(const char* discoveryUrl, const char* filterTransportProfileUri,
                      const UA_String expectedEndpointUrls[], size_t expectedEndpointUrlsSize) {
-    UA_Client *client = UA_Client_new(UA_ClientConfig_default);
+    UA_Client *client = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(client));
 
     ck_assert_uint_eq(UA_Client_connect(client, discoveryUrl), UA_STATUSCODE_GOOD);
 
@@ -422,8 +421,10 @@ START_TEST(Client_find_on_network_registered) {
     ck_assert_uint_eq(gethostname(hostname, 255), 0);
 
     //DNS limits name to max 63 chars (+ \0)
-    snprintf(urls[0], 64, "LDS_test-%s", hostname);
-    snprintf(urls[1], 64, "Register_test-%s", hostname);
+    //We need this ugly casting, otherwise gcc >7.2 will complain about format-truncation, but we want it here
+    void *hostnameVoid = (void*)hostname;
+    snprintf(urls[0], 64, "LDS_test-%s", (char*)hostnameVoid);
+    snprintf(urls[1], 64, "Register_test-%s", (char*)hostnameVoid);
     expectedUris[0] = UA_STRING(urls[0]);
     expectedUris[1] = UA_STRING(urls[1]);
     FindOnNetworkAndCheck(expectedUris, 2, NULL, NULL, NULL, 0);

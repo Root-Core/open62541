@@ -8,11 +8,15 @@
  * provides both a server- and clientside API, so creating a client is as easy as
  * creating a server. Copy the following into a file `myClient.c`: */
 
-#include <stdio.h>
-#include "open62541.h"
+#include <ua_client_highlevel.h>
+#include <ua_config_default.h>
+#include <ua_log_stdout.h>
+
+#include <stdlib.h>
 
 int main(void) {
-    UA_Client *client = UA_Client_new(UA_ClientConfig_default);
+    UA_Client *client = UA_Client_new();
+    UA_ClientConfig_setDefault(UA_Client_getConfig(client));
     UA_StatusCode retval = UA_Client_connect(client, "opc.tcp://localhost:4840");
     if(retval != UA_STATUSCODE_GOOD) {
         UA_Client_delete(client);
@@ -37,9 +41,9 @@ int main(void) {
     }
 
     /* Clean up */
-    UA_Variant_deleteMembers(&value);
+    UA_Variant_clear(&value);
     UA_Client_delete(client); /* Disconnects the client internally */
-    return UA_STATUSCODE_GOOD;
+    return EXIT_SUCCESS;
 }
 
 /**
@@ -47,13 +51,13 @@ int main(void) {
  *
  * .. code-block:: bash
  *
- *     $ gcc -std=c99 open6251.c myClient.c -o myClient
+ *     $ gcc -std=c99 open62541.c myClient.c -o myClient
  *
  * In a MinGW environment, the Winsock library must be added.
  *
  * .. code-block:: bash
  *
- *    $ gcc -std=c99 open6251.c myClient.c -lws2_32 -o myClient.exe
+ *    $ gcc -std=c99 open62541.c myClient.c -lws2_32 -o myClient.exe
  *
  * Further tasks
  * ^^^^^^^^^^^^^

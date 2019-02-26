@@ -1,4 +1,4 @@
-#!/usr/bin/env/python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 ###
@@ -19,6 +19,10 @@
 import sys
 import logging
 from datatypes import *
+
+__all__ = ['Reference', 'RefOrAlias', 'Node', 'ReferenceTypeNode',
+           'ObjectNode', 'VariableNode', 'VariableTypeNode',
+           'MethodNode', 'ObjectTypeNode', 'DataTypeNode', 'ViewNode']
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +54,9 @@ class Reference(object):
     def __eq__(self, other):
         return str(self) == str(other)
 
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     def __hash__(self):
         return hash(str(self))
 
@@ -70,6 +77,7 @@ class Node(object):
         self.userWriteMask = 0
         self.references = set()
         self.hidden = False
+        self.modelUri = None
 
     def __str__(self):
         return self.__class__.__name__ + "(" + str(self.id) + ")"
@@ -190,7 +198,7 @@ class ReferenceTypeNode(Node):
         self.symmetric = False
         self.inverseName = ""
         if xmlelement:
-            self.parseXML(xmlelement)
+            ReferenceTypeNode.parseXML(self, xmlelement)
 
     def parseXML(self, xmlelement):
         Node.parseXML(self, xmlelement)
@@ -212,7 +220,7 @@ class ObjectNode(Node):
         Node.__init__(self)
         self.eventNotifier = 0
         if xmlelement:
-            self.parseXML(xmlelement)
+            ObjectNode.parseXML(self, xmlelement)
 
     def parseXML(self, xmlelement):
         Node.parseXML(self, xmlelement)
@@ -234,7 +242,7 @@ class VariableNode(Node):
         self.value = None
         self.xmlValueDef = None
         if xmlelement:
-            self.parseXML(xmlelement)
+            VariableNode.parseXML(self, xmlelement)
 
     def parseXML(self, xmlelement):
         Node.parseXML(self, xmlelement)
@@ -281,12 +289,12 @@ class VariableNode(Node):
             return False
 
         # FIXME: Don't build at all or allocate "defaults"? I'm for not building at all.
-        if self.xmlValueDef == None:
+        if self.xmlValueDef is None:
             #logger.warn("Variable " + self.browseName() + "/" + str(self.id()) + " is not initialized. No memory will be allocated.")
             return False
 
         self.value = Value()
-        self.value.parseXMLEncoding(self.xmlValueDef, dataTypeNode, self)
+        self.value.parseXMLEncoding(self.xmlValueDef, dataTypeNode, self, nodeset.namespaceMapping[self.modelUri])
 
         # Array Dimensions must accurately represent the value and will be patched
         # reflect the exaxt dimensions attached binary stream.
@@ -300,7 +308,7 @@ class VariableTypeNode(VariableNode):
         VariableNode.__init__(self)
         self.isAbstract = False
         if xmlelement:
-            self.parseXML(xmlelement)
+            VariableTypeNode.parseXML(self, xmlelement)
 
     def parseXML(self, xmlelement):
         Node.parseXML(self, xmlelement)
@@ -315,7 +323,7 @@ class MethodNode(Node):
         self.userExecutable = True
         self.methodDecalaration = None
         if xmlelement:
-            self.parseXML(xmlelement)
+            MethodNode.parseXML(self, xmlelement)
 
     def parseXML(self, xmlelement):
         Node.parseXML(self, xmlelement)
@@ -332,7 +340,7 @@ class ObjectTypeNode(Node):
         Node.__init__(self)
         self.isAbstract = False
         if xmlelement:
-            self.parseXML(xmlelement)
+            ObjectTypeNode.parseXML(self, xmlelement)
 
     def parseXML(self, xmlelement):
         Node.parseXML(self, xmlelement)
@@ -381,8 +389,9 @@ class DataTypeNode(Node):
         self.__encodingBuilt__ = False
         self.__definition__ = []
         self.__isEnum__     = False
+        self.__isOptionSet__ = False
         if xmlelement:
-            self.parseXML(xmlelement)
+            DataTypeNode.parseXML(self, xmlelement)
 
     def parseXML(self, xmlelement):
         Node.parseXML(self, xmlelement)
@@ -458,7 +467,7 @@ class DataTypeNode(Node):
             used.
         """
 
-        prefix = " " + "|"*indent+ "+"
+        prefix = " " + "|" * indent + "+"
 
         if force==True:
             self.__encodingBuilt__ = False
@@ -483,22 +492,27 @@ class DataTypeNode(Node):
             logger.debug("")
             return self.__baseTypeEncoding__
 
-        if self.__xmlDefinition__ == None:
-            # Check if there is a supertype available
-            for ref in self.references:
-                if ref.isForward:
-                    continue
+
+        # Check if there is a supertype available
+        parentType = None
+        for ref in self.references:
+            if ref.isForward:
+                continue
                 # hasSubtype
-                if ref.referenceType.i == 45:
-                    targetNode = nodeset.nodes[ref.target]
-                    if targetNode is not None and isinstance(targetNode, DataTypeNode):
-                        logger.debug( prefix + "Attempting definition using supertype " + str(targetNode.browseName) + " for DataType " + " " + str(self.browseName))
-                        subenc = targetNode.buildEncoding(nodeset=nodeset, indent=indent+1)
-                        if not targetNode.isEncodable():
-                            self.__encodable__ = False
-                            break
-                        else:
-                            self.__baseTypeEncoding__ = self.__baseTypeEncoding__ + [self.browseName.name, subenc, 0]
+            if ref.referenceType.i == 45:
+                targetNode = nodeset.nodes[ref.target]
+                if targetNode is not None and isinstance(targetNode, DataTypeNode):
+                    parentType = targetNode
+                    break
+
+        if self.__xmlDefinition__ is None:
+            if parentType is not None:
+                logger.debug( prefix + "Attempting definition using supertype " + str(targetNode.browseName) + " for DataType " + " " + str(self.browseName))
+                subenc = targetNode.buildEncoding(nodeset=nodeset, indent=indent+1)
+                if not targetNode.isEncodable():
+                    self.__encodable__ = False
+                else:
+                    self.__baseTypeEncoding__ = self.__baseTypeEncoding__ + [self.browseName.name, subenc, None]
             if len(self.__baseTypeEncoding__) == 0:
                 logger.debug(prefix + "No viable definition for " + str(self.browseName) + " " + str(self.id) + " found.")
                 self.__encodable__ = False
@@ -514,7 +528,7 @@ class DataTypeNode(Node):
 
         isEnum = True
         isSubType = True
-        hasValueRank = 0
+        isOptionSet = parentType is not None and parentType.id.ns == 0 and parentType.id.i==12755
 
         # We need to store the definition as ordered data, but can't use orderedDict
         # for backward compatibility with Python 2.6 and 3.4
@@ -527,7 +541,7 @@ class DataTypeNode(Node):
                 fname  = ""
                 fdtype = ""
                 enumVal = ""
-                valueRank = 0
+                valueRank = None
                 for at,av in x.attributes.items():
                     if at == "DataType":
                         fdtype = str(av)
@@ -541,8 +555,6 @@ class DataTypeNode(Node):
                         isSubType = False
                     elif at == "ValueRank":
                         valueRank = int(av)
-                        if valueRank > 0:
-                            logger.warn("Value ranks >0 not fully supported. Further steps may fail")
                     else:
                         logger.warn("Unknown Field Attribute " + str(at))
                 # This can either be an enumeration OR a structure, not both.
@@ -563,9 +575,11 @@ class DataTypeNode(Node):
 
                     # This might be a subtype... follow the node defined as datatype to find out
                     # what encoding to use
-                    if not NodeId(fdtype) in nodeset.nodes:
-                        raise Exception("Node {} not found in nodeset".format(NodeId(fdtype)))
-                    dtnode = nodeset.nodes[NodeId(fdtype)]
+                    fdTypeNodeId = NodeId(fdtype)
+                    fdTypeNodeId.ns = nodeset.namespaceMapping[self.modelUri][fdTypeNodeId.ns]
+                    if not fdTypeNodeId in nodeset.nodes:
+                        raise Exception("Node {} not found in nodeset".format(fdTypeNodeId))
+                    dtnode = nodeset.nodes[fdTypeNodeId]
                     # The node in the datatype element was found. we inherit its encoding,
                     # but must still ensure that the dtnode is itself validly encodable
                     typeDict.append([fname, dtnode])
@@ -585,6 +599,16 @@ class DataTypeNode(Node):
         # enclosing list.
         while len(self.__baseTypeEncoding__) == 1 and isinstance(self.__baseTypeEncoding__[0], list):
             self.__baseTypeEncoding__ = self.__baseTypeEncoding__[0]
+
+        if isOptionSet == True:
+            self.__isOptionSet__ = True
+            subenc = parentType.getEncoding()
+            if not parentType.isEncodable():
+                self.__encodable__ = False
+            else:
+                self.__baseTypeEncoding__ = self.__baseTypeEncoding__ + [self.browseName.name, subenc, None]
+                self.__definition__ = enumDict
+            return self.__baseTypeEncoding__
 
         if isEnum == True:
             self.__baseTypeEncoding__ = self.__baseTypeEncoding__ + ['Int32']
@@ -606,10 +630,10 @@ class DataTypeNode(Node):
 class ViewNode(Node):
     def __init__(self, xmlelement=None):
         Node.__init__(self)
-        self.containsNoLoops == False
-        self.eventNotifier == False
+        self.containsNoLoops = False
+        self.eventNotifier = False
         if xmlelement:
-            self.parseXML(xmlelement)
+            ViewNode.parseXML(self, xmlelement)
 
     def parseXML(self, xmlelement):
         Node.parseXML(self, xmlelement)

@@ -9,11 +9,13 @@
 #ifndef UA_PLUGIN_ACCESS_CONTROL_H_
 #define UA_PLUGIN_ACCESS_CONTROL_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "ua_types.h"
+#include "ua_server.h"
+
+_UA_BEGIN_DECLS
+
+struct UA_AccessControl;
+typedef struct UA_AccessControl UA_AccessControl;
 
 /**
  * .. _access-control:
@@ -23,9 +25,6 @@ extern "C" {
  * The access control callback is used to authenticate sessions and grant access
  * rights accordingly. */
 
-struct UA_AccessControl;
-typedef struct UA_AccessControl UA_AccessControl;
-
 struct UA_AccessControl {
     void *context;
     void (*deleteMembers)(UA_AccessControl *ac);
@@ -34,9 +33,13 @@ struct UA_AccessControl {
     size_t userTokenPoliciesSize;
     UA_UserTokenPolicy *userTokenPolicies;
     
-    /* Authenticate a session. The session context is attached to the session and
-     * later passed into the node-based access control callbacks. */
+    /* Authenticate a session. The session context is attached to the session
+     * and later passed into the node-based access control callbacks. The new
+     * session is rejected if a StatusCode other than UA_STATUSCODE_GOOD is
+     * returned. */
     UA_StatusCode (*activateSession)(UA_Server *server, UA_AccessControl *ac,
+                                     const UA_EndpointDescription *endpointDescription,
+                                     const UA_ByteString *secureChannelRemoteCertificate,
                                      const UA_NodeId *sessionId,
                                      const UA_ExtensionObject *userIdentityToken,
                                      void **sessionContext);
@@ -86,10 +89,24 @@ struct UA_AccessControl {
     UA_Boolean (*allowDeleteReference)(UA_Server *server, UA_AccessControl *ac,
                                        const UA_NodeId *sessionId, void *sessionContext,
                                        const UA_DeleteReferencesItem *item);
+#ifdef UA_ENABLE_HISTORIZING
+    /* Allow insert,replace,update of historical data */
+    UA_Boolean (*allowHistoryUpdateUpdateData)(UA_Server *server, UA_AccessControl *ac,
+                                               const UA_NodeId *sessionId, void *sessionContext,
+                                               const UA_NodeId *nodeId,
+                                               UA_PerformUpdateType performInsertReplace,
+                                               const UA_DataValue *value);
+
+    /* Allow delete of historical data */
+    UA_Boolean (*allowHistoryUpdateDeleteRawModified)(UA_Server *server, UA_AccessControl *ac,
+                                                      const UA_NodeId *sessionId, void *sessionContext,
+                                                      const UA_NodeId *nodeId,
+                                                      UA_DateTime startTimestamp,
+                                                      UA_DateTime endTimestamp,
+                                                      bool isDeleteModified);
+#endif
 };
 
-#ifdef __cplusplus
-}
-#endif
+_UA_END_DECLS
 
 #endif /* UA_PLUGIN_ACCESS_CONTROL_H_ */

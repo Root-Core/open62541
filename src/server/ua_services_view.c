@@ -90,7 +90,7 @@ browseReferences(UA_Server *server, const UA_Node *node,
     /* If the node has no references, just return */
     if(node->referencesSize == 0) {
         result->referencesSize = 0;
-        return true;;
+        return true;
     }
 
     /* Follow all references? */
@@ -321,7 +321,13 @@ Operation_Browse(UA_Server *server, UA_Session *session, UA_UInt32 *maxrefs,
 
 void Service_Browse(UA_Server *server, UA_Session *session,
                     const UA_BrowseRequest *request, UA_BrowseResponse *response) {
-    UA_LOG_DEBUG_SESSION(server->config.logger, session, "Processing BrowseRequest");
+    UA_LOG_DEBUG_SESSION(&server->config.logger, session, "Processing BrowseRequest");
+
+    if(server->config.maxNodesPerBrowse != 0 &&
+       request->nodesToBrowseSize > server->config.maxNodesPerBrowse) {
+        response->responseHeader.serviceResult = UA_STATUSCODE_BADTOOMANYOPERATIONS;
+        return;
+    }
 
     /* No views supported at the moment */
     if(!UA_NodeId_isNull(&request->view.viewId)) {
@@ -341,7 +347,7 @@ UA_BrowseResult
 UA_Server_browse(UA_Server *server, UA_UInt32 maxrefs, const UA_BrowseDescription *descr) {
     UA_BrowseResult result;
     UA_BrowseResult_init(&result);
-    Operation_Browse(server, &adminSession, &maxrefs, descr, &result);
+    Operation_Browse(server, &server->adminSession, &maxrefs, descr, &result);
     return result;
 }
 
@@ -385,7 +391,7 @@ void
 Service_BrowseNext(UA_Server *server, UA_Session *session,
                    const UA_BrowseNextRequest *request,
                    UA_BrowseNextResponse *response) {
-    UA_LOG_DEBUG_SESSION(server->config.logger, session,
+    UA_LOG_DEBUG_SESSION(&server->config.logger, session,
                          "Processing BrowseNextRequest");
     UA_Boolean releaseContinuationPoints = request->releaseContinuationPoints; /* request is const */
     response->responseHeader.serviceResult =
@@ -400,7 +406,7 @@ UA_Server_browseNext(UA_Server *server, UA_Boolean releaseContinuationPoint,
                      const UA_ByteString *continuationPoint) {
     UA_BrowseResult result;
     UA_BrowseResult_init(&result);
-    Operation_BrowseNext(server, &adminSession, &releaseContinuationPoint,
+    Operation_BrowseNext(server, &server->adminSession, &releaseContinuationPoint,
                          continuationPoint, &result);
     return result;
 }
@@ -713,7 +719,7 @@ UA_Server_translateBrowsePathToNodeIds(UA_Server *server,
     UA_BrowsePathResult result;
     UA_BrowsePathResult_init(&result);
     UA_UInt32 nodeClassMask = 0; /* All node classes */
-    Operation_TranslateBrowsePathToNodeIds(server, &adminSession, &nodeClassMask,
+    Operation_TranslateBrowsePathToNodeIds(server, &server->adminSession, &nodeClassMask,
                                            browsePath, &result);
     return result;
 }
@@ -722,7 +728,7 @@ void
 Service_TranslateBrowsePathsToNodeIds(UA_Server *server, UA_Session *session,
                                       const UA_TranslateBrowsePathsToNodeIdsRequest *request,
                                       UA_TranslateBrowsePathsToNodeIdsResponse *response) {
-    UA_LOG_DEBUG_SESSION(server->config.logger, session,
+    UA_LOG_DEBUG_SESSION(&server->config.logger, session,
                          "Processing TranslateBrowsePathsToNodeIdsRequest");
 
     if(server->config.maxNodesPerTranslateBrowsePathsToNodeIds != 0 &&
@@ -761,7 +767,7 @@ UA_Server_browseSimplifiedBrowsePath(UA_Server *server, const UA_NodeId origin,
     UA_BrowsePathResult bpr;
     UA_BrowsePathResult_init(&bpr);
     UA_UInt32 nodeClassMask = UA_NODECLASS_OBJECT | UA_NODECLASS_VARIABLE;
-    Operation_TranslateBrowsePathToNodeIds(server, &adminSession, &nodeClassMask, &bp, &bpr);
+    Operation_TranslateBrowsePathToNodeIds(server, &server->adminSession, &nodeClassMask, &bp, &bpr);
     return bpr;
 }
 
@@ -772,7 +778,7 @@ UA_Server_browseSimplifiedBrowsePath(UA_Server *server, const UA_NodeId origin,
 void Service_RegisterNodes(UA_Server *server, UA_Session *session,
                            const UA_RegisterNodesRequest *request,
                            UA_RegisterNodesResponse *response) {
-    UA_LOG_DEBUG_SESSION(server->config.logger, session,
+    UA_LOG_DEBUG_SESSION(&server->config.logger, session,
                          "Processing RegisterNodesRequest");
 
     //TODO: hang the nodeids to the session if really needed
@@ -797,7 +803,7 @@ void Service_RegisterNodes(UA_Server *server, UA_Session *session,
 void Service_UnregisterNodes(UA_Server *server, UA_Session *session,
                              const UA_UnregisterNodesRequest *request,
                              UA_UnregisterNodesResponse *response) {
-    UA_LOG_DEBUG_SESSION(server->config.logger, session,
+    UA_LOG_DEBUG_SESSION(&server->config.logger, session,
                          "Processing UnRegisterNodesRequest");
 
     //TODO: remove the nodeids from the session if really needed

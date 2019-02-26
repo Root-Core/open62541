@@ -16,13 +16,11 @@
 #ifndef UA_TYPES_H_
 #define UA_TYPES_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "ua_config.h"
 #include "ua_constants.h"
 #include "ua_statuscodes.h"
+
+_UA_BEGIN_DECLS
 
 #define UA_BUILTIN_TYPES_COUNT 25U
 
@@ -49,8 +47,8 @@ extern "C" {
  * ^^^^^^^
  * A two-state logical value (true or false). */
 typedef bool UA_Boolean;
-#define UA_TRUE true
-#define UA_FALSE false
+#define UA_TRUE true UA_INTERNAL_DEPRECATED
+#define UA_FALSE false UA_INTERNAL_DEPRECATED
 
 /**
  * SByte
@@ -301,8 +299,8 @@ typedef UA_String UA_XmlElement;
  * An identifier for a node in the address space of an OPC UA Server. */
 enum UA_NodeIdType {
     UA_NODEIDTYPE_NUMERIC    = 0, /* In the binary encoding, this can also
-                                     become 1 or 2 (2byte and 4byte encoding of
-                                     small numeric nodeids) */
+                                   * become 1 or 2 (two-byte and four-byte
+                                   * encoding of small numeric nodeids) */
     UA_NODEIDTYPE_STRING     = 3,
     UA_NODEIDTYPE_GUID       = 4,
     UA_NODEIDTYPE_BYTESTRING = 5
@@ -718,18 +716,18 @@ typedef struct {
  * ^^^^^^^^^
  * A data value with an associated status code and timestamps. */
 typedef struct {
+    UA_Variant    value;
+    UA_DateTime   sourceTimestamp;
+    UA_DateTime   serverTimestamp;
+    UA_UInt16     sourcePicoseconds;
+    UA_UInt16     serverPicoseconds;
+    UA_StatusCode status;
     UA_Boolean    hasValue             : 1;
     UA_Boolean    hasStatus            : 1;
     UA_Boolean    hasSourceTimestamp   : 1;
     UA_Boolean    hasServerTimestamp   : 1;
     UA_Boolean    hasSourcePicoseconds : 1;
     UA_Boolean    hasServerPicoseconds : 1;
-    UA_Variant    value;
-    UA_StatusCode status;
-    UA_DateTime   sourceTimestamp;
-    UA_UInt16     sourcePicoseconds;
-    UA_DateTime   serverTimestamp;
-    UA_UInt16     serverPicoseconds;
 } UA_DataValue;
 
 /**
@@ -772,7 +770,7 @@ typedef struct UA_DiagnosticInfo {
  * - ``UA_StatusCode T_copy(const T *src, T *dst)``: Copy the content of the
  *   data type. Returns ``UA_STATUSCODE_GOOD`` or
  *   ``UA_STATUSCODE_BADOUTOFMEMORY``.
- * - ``void T_deleteMembers(T *ptr)``: Delete the dynamically allocated content
+ * - ``void T_clear(T *ptr)``: Delete the dynamically allocated content
  *   of the data type and perform a ``T_init`` to reset the type.
  * - ``void T_delete(T *ptr)``: Delete the content of the data type and the
  *   memory for the data type itself.
@@ -799,34 +797,66 @@ typedef struct {
     UA_Boolean isArray       : 1; /* The member is an array */
 } UA_DataTypeMember;
 
+/* The DataType "kind" is an internal type classification. It is used to
+ * dispatch handling to the correct routines. */
+#define UA_DATATYPEKINDS 31
+typedef enum {
+    UA_DATATYPEKIND_BOOLEAN = 0,
+    UA_DATATYPEKIND_SBYTE = 1,
+    UA_DATATYPEKIND_BYTE = 2,
+    UA_DATATYPEKIND_INT16 = 3,
+    UA_DATATYPEKIND_UINT16 = 4,
+    UA_DATATYPEKIND_INT32 = 5,
+    UA_DATATYPEKIND_UINT32 = 6,
+    UA_DATATYPEKIND_INT64 = 7,
+    UA_DATATYPEKIND_UINT64 = 8,
+    UA_DATATYPEKIND_FLOAT = 9,
+    UA_DATATYPEKIND_DOUBLE = 10,
+    UA_DATATYPEKIND_STRING = 11,
+    UA_DATATYPEKIND_DATETIME = 12,
+    UA_DATATYPEKIND_GUID = 13,
+    UA_DATATYPEKIND_BYTESTRING = 14,
+    UA_DATATYPEKIND_XMLELEMENT = 15,
+    UA_DATATYPEKIND_NODEID = 16,
+    UA_DATATYPEKIND_EXPANDEDNODEID = 17,
+    UA_DATATYPEKIND_STATUSCODE = 18,
+    UA_DATATYPEKIND_QUALIFIEDNAME = 19,
+    UA_DATATYPEKIND_LOCALIZEDTEXT = 20,
+    UA_DATATYPEKIND_EXTENSIONOBJECT = 21,
+    UA_DATATYPEKIND_DATAVALUE = 22,
+    UA_DATATYPEKIND_VARIANT = 23,
+    UA_DATATYPEKIND_DIAGNOSTICINFO = 24,
+    UA_DATATYPEKIND_DECIMAL = 25,
+    UA_DATATYPEKIND_ENUM = 26,
+    UA_DATATYPEKIND_STRUCTURE = 27,
+    UA_DATATYPEKIND_OPTSTRUCT = 28, /* struct with optional fields */
+    UA_DATATYPEKIND_UNION = 29,
+    UA_DATATYPEKIND_BITFIELDCLUSTER = 30 /* bitfields + padding */
+} UA_DataTypeKind;
+
 struct UA_DataType {
 #ifdef UA_ENABLE_TYPENAMES
     const char *typeName;
 #endif
-    UA_NodeId  typeId;           /* The nodeid of the type */
-    UA_UInt16  memSize;          /* Size of the struct in memory */
-    UA_UInt16  typeIndex;        /* Index of the type in the datatypetable */
-    UA_Byte    membersSize;      /* How many members does the type have? */
-    UA_Boolean builtin      : 1; /* The type is "builtin" and has dedicated de-
-                                    and encoding functions */
-    UA_Boolean pointerFree  : 1; /* The type (and its members) contains no
-                                    pointers that need to be freed */
-    UA_Boolean overlayable  : 1; /* The type has the identical memory layout in
-                                    memory and on the binary stream. */
-    UA_UInt16  binaryEncodingId; /* NodeId of datatype when encoded as binary */
-    //UA_UInt16  xmlEncodingId;  /* NodeId of datatype when encoded as XML */
+    UA_NodeId typeId;                /* The nodeid of the type */
+    UA_UInt16 memSize;               /* Size of the struct in memory */
+    UA_UInt16 typeIndex;             /* Index of the type in the datatypetable */
+    UA_UInt32 typeKind         : 6;  /* Dispatch index for the handling routines */
+    UA_UInt32 pointerFree      : 1;  /* The type (and its members) contains no
+                                      * pointers that need to be freed */
+    UA_UInt32 overlayable      : 1;  /* The type has the identical memory layout
+                                      * in memory and on the binary stream. */
+    UA_UInt32 membersSize      : 8;  /* How many members does the type have? */
+    UA_UInt32 binaryEncodingId : 16; /* NodeId of datatype when encoded as binary */
+    //UA_UInt16  xmlEncodingId;      /* NodeId of datatype when encoded as XML */
     UA_DataTypeMember *members;
 };
 
-UA_Boolean isDataTypeNumeric(const UA_DataType *type);
-
-/* The following is used to exclude type names in the definition of UA_DataType
- * structures if the feature is disabled. */
-#ifdef UA_ENABLE_TYPENAMES
-# define UA_TYPENAME(name) name,
-#else
-# define UA_TYPENAME(name)
-#endif
+/* Test if the data type is a numeric builtin data type. This includes Boolean,
+ * integers and floating point numbers. Not included are DateTime and
+ * StatusCode. */
+UA_Boolean
+UA_DataType_isNumeric(const UA_DataType *type);
 
 /**
  * Builtin data types can be accessed as UA_TYPES[UA_TYPES_XXX], where XXX is
@@ -874,7 +904,9 @@ UA_copy(const void *src, void *dst, const UA_DataType *type);
  *
  * @param p The memory location of the variable
  * @param type The datatype description of the variable */
-void UA_EXPORT UA_deleteMembers(void *p, const UA_DataType *type);
+void UA_EXPORT UA_clear(void *p, const UA_DataType *type);
+
+#define UA_deleteMembers(p, type) UA_clear(p, type)
 
 /* Frees a variable and all of its content.
  *
@@ -894,13 +926,15 @@ void UA_EXPORT UA_delete(void *p, const UA_DataType *type);
  * In open62541 however, we use ``size_t`` for array lengths. An undefined array
  * has length 0 and the data pointer is ``NULL``. An array of length 0 also has
  * length 0 but a data pointer ``UA_EMPTY_ARRAY_SENTINEL``. */
+
 /* Allocates and initializes an array of variables of a specific type
  *
  * @param size The requested array length
  * @param type The datatype description
  * @return Returns the memory location of the variable or NULL if no memory
            could be allocated */
-void UA_EXPORT * UA_Array_new(size_t size, const UA_DataType *type) UA_FUNC_ATTR_MALLOC;
+void UA_EXPORT *
+UA_Array_new(size_t size, const UA_DataType *type) UA_FUNC_ATTR_MALLOC;
 
 /* Allocates and copies an array
  *
@@ -937,13 +971,33 @@ UA_Guid UA_EXPORT UA_Guid_random(void);     /* no cryptographic entropy */
  * -------------------------------
  *
  * The following data types were auto-generated from a definition in XML format.
+ */
+
+/* The following is used to exclude type names in the definition of UA_DataType
+ * structures if the feature is disabled. */
+#ifdef UA_ENABLE_TYPENAMES
+# define UA_TYPENAME(name) name,
+#else
+# define UA_TYPENAME(name)
+#endif
+
+/* Datatype arrays with custom type definitions can be added in a linked list to
+ * the client or server configuration. Datatype members can point to types in
+ * the same array via the ``memberTypeIndex``. If ``namespaceZero`` is set to
+ * true, the member datatype is looked up in the array of builtin datatypes
+ * instead. */
+typedef struct UA_DataTypeArray {
+    const struct UA_DataTypeArray *next;
+    const size_t typesSize;
+    const UA_DataType *types;
+} UA_DataTypeArray;
+
+/**
  *
  * .. toctree::
  *
  *    types_generated */
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
+_UA_END_DECLS
 
 #endif /* UA_TYPES_H_ */

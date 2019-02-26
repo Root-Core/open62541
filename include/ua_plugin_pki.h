@@ -8,12 +8,10 @@
 #ifndef UA_PLUGIN_PKI_H_
 #define UA_PLUGIN_PKI_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "ua_types.h"
 #include "ua_server.h"
+
+_UA_BEGIN_DECLS
 
 /**
  * Public Key Infrastructure Integration
@@ -37,13 +35,20 @@ typedef struct UA_CertificateVerification UA_CertificateVerification;
 
 struct UA_CertificateVerification {
     void *context;
+
+    /* Verify the certificate against the configured policies and trust chain. */
     UA_StatusCode (*verifyCertificate)(void *verificationContext,
                                        const UA_ByteString *certificate);
+
+    /* Verify that the certificate has the applicationURI in the subject name. */
+    UA_StatusCode (*verifyApplicationURI)(void *verificationContext,
+                                          const UA_ByteString *certificate,
+                                          const UA_String *applicationURI);
+
+    /* Delete the certificate verification context */
     void (*deleteMembers)(UA_CertificateVerification *cv);
 };
 
-#ifdef __cplusplus
-}
-#endif
+_UA_END_DECLS
 
 #endif /* UA_PLUGIN_PKI_H_ */

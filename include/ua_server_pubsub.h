@@ -8,11 +8,11 @@
 #ifndef UA_SERVER_PUBSUB_H
 #define UA_SERVER_PUBSUB_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "ua_server.h"
+
+_UA_BEGIN_DECLS
+
+#ifdef UA_ENABLE_PUBSUB
 
 /**
  * .. _pubsub:
@@ -68,8 +68,22 @@ extern "C" {
  *                 |    +-----------------+
  *                 +----> UA_DataSetField |  UA_PublishedDataSet_addDataSetField
  *                      +-----------------+
+ * PubSub compile flags
+ * --------------------
+ *
+ * **UA_ENABLE_PUBSUB**
+ *  Enable the experimental OPC UA PubSub support. The option will include the PubSub UDP multicast plugin. Disabled by default.
+ * **UA_ENABLE_PUBSUB_DELTAFRAMES**
+ *  The PubSub messages differentiate between keyframe (all published values contained) and deltaframe (only changed values contained) messages.
+ *  Deltaframe messages creation consumes some additional ressources and can be disabled with this flag. Disabled by default.
+ *  Compile the human-readable name of the StatusCodes into the binary. Disabled by default.
+ * **UA_ENABLE_PUBSUB_INFORMATIONMODEL**
+ *  Enable the information model representation of the PubSub configuration. For more details take a look at the following section `PubSub Information Model Representation`. Disabled by default.
+ *
  * PubSub Information Model Representation
- * -----------
+ * ----------------------------------------
+ * .. _pubsub_informationmodel:
+ *
  * The complete PubSub configuration is available inside the information model.
  * The entry point is the node 'PublishSubscribe, located under the Server node.
  * The standard defines for PubSub no new Service set. The configuration can optionally
@@ -86,9 +100,15 @@ extern "C" {
  * Take a look on the PubSub Tutorials for mor details about the API usage.
  */
 
+typedef enum {
+    UA_PUBSUB_PUBLISHERID_NUMERIC,
+    UA_PUBSUB_PUBLISHERID_STRING
+} UA_PublisherIdType;
+
 typedef struct {
     UA_String name;
     UA_Boolean enabled;
+    UA_PublisherIdType publisherIdType;
     union { /* std: valid types UInt or String */
         UA_UInt32 numeric;
         UA_String string;
@@ -100,20 +120,20 @@ typedef struct {
     UA_Variant connectionTransportSettings;
 } UA_PubSubConnectionConfig;
 
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_addPubSubConnection(UA_Server *server,
                               const UA_PubSubConnectionConfig *connectionConfig,
                               UA_NodeId *connectionIdentifier);
 
 /* Returns a deep copy of the config */
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_getPubSubConnectionConfig(UA_Server *server,
                                     const UA_NodeId connection,
                                     UA_PubSubConnectionConfig *config);
 
 /* Remove Connection, identified by the NodeId. Deletion of Connection
  * removes all contained WriterGroups and Writers. */
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_removePubSubConnection(UA_Server *server, const UA_NodeId connection);
 
 /**
@@ -168,7 +188,7 @@ typedef struct {
     } config;
 } UA_PublishedDataSetConfig;
 
-void
+void UA_EXPORT
 UA_PublishedDataSetConfig_deleteMembers(UA_PublishedDataSetConfig *pdsConfig);
 
 typedef struct {
@@ -178,20 +198,20 @@ typedef struct {
     UA_ConfigurationVersionDataType configurationVersion;
 } UA_AddPublishedDataSetResult;
 
-UA_AddPublishedDataSetResult
+UA_AddPublishedDataSetResult UA_EXPORT
 UA_Server_addPublishedDataSet(UA_Server *server,
                               const UA_PublishedDataSetConfig *publishedDataSetConfig,
                               UA_NodeId *pdsIdentifier);
 
 /* Returns a deep copy of the config */
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_getPublishedDataSetConfig(UA_Server *server, const UA_NodeId pds,
                                     UA_PublishedDataSetConfig *config);
 
 /* Remove PublishedDataSet, identified by the NodeId. Deletion of PDS removes
  * all contained and linked PDS Fields. Connected WriterGroups will be also
  * removed. */
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_removePublishedDataSet(UA_Server *server, const UA_NodeId pds);
 
 /**
@@ -222,7 +242,7 @@ typedef struct {
     } field;
 } UA_DataSetFieldConfig;
     
-void
+void UA_EXPORT
 UA_DataSetFieldConfig_deleteMembers(UA_DataSetFieldConfig *dataSetFieldConfig);
 
 typedef struct {
@@ -230,18 +250,18 @@ typedef struct {
     UA_ConfigurationVersionDataType configurationVersion;
 } UA_DataSetFieldResult;
 
-UA_DataSetFieldResult
+UA_DataSetFieldResult UA_EXPORT
 UA_Server_addDataSetField(UA_Server *server,
                           const UA_NodeId publishedDataSet,
                           const UA_DataSetFieldConfig *fieldConfig,
                           UA_NodeId *fieldIdentifier);
 
 /* Returns a deep copy of the config */
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_getDataSetFieldConfig(UA_Server *server, const UA_NodeId dsf,
                                 UA_DataSetFieldConfig *config);
 
-UA_DataSetFieldResult
+UA_DataSetFieldResult UA_EXPORT
 UA_Server_removeDataSetField(UA_Server *server, const UA_NodeId dsf);
 
 /**
@@ -279,25 +299,25 @@ typedef struct {
     UA_UInt16 maxEncapsulatedDataSetMessageCount;
 } UA_WriterGroupConfig;
 
-void
+void UA_EXPORT
 UA_WriterGroupConfig_deleteMembers(UA_WriterGroupConfig *writerGroupConfig);
 
 /* Add a new WriterGroup to an existing Connection */
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_addWriterGroup(UA_Server *server, const UA_NodeId connection,
                          const UA_WriterGroupConfig *writerGroupConfig,
                          UA_NodeId *writerGroupIdentifier);
 
 /* Returns a deep copy of the config */
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_getWriterGroupConfig(UA_Server *server, const UA_NodeId writerGroup,
                                UA_WriterGroupConfig *config);
 
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_updateWriterGroupConfig(UA_Server *server, UA_NodeId writerGroupIdentifier,
                                   const UA_WriterGroupConfig *config);
 
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_removeWriterGroup(UA_Server *server, const UA_NodeId writerGroup);
 
 /**
@@ -322,7 +342,7 @@ typedef struct {
     UA_KeyValuePair *dataSetWriterProperties;
 } UA_DataSetWriterConfig;
 
-void
+void UA_EXPORT
 UA_DataSetWriterConfig_deleteMembers(UA_DataSetWriterConfig *pdsConfig);
 
 /* Add a new DataSetWriter to a existing WriterGroup. The DataSetWriter must be
@@ -331,22 +351,22 @@ UA_DataSetWriterConfig_deleteMembers(UA_DataSetWriterConfig *pdsConfig);
  * Part 14, 7.1.5.2.1 defines: The link between the PublishedDataSet and
  * DataSetWriter shall be created when an instance of the DataSetWriterType is
  * created. */
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_addDataSetWriter(UA_Server *server,
                            const UA_NodeId writerGroup, const UA_NodeId dataSet,
                            const UA_DataSetWriterConfig *dataSetWriterConfig,
                            UA_NodeId *writerIdentifier);
 
 /* Returns a deep copy of the config */
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_getDataSetWriterConfig(UA_Server *server, const UA_NodeId dsw,
                                  UA_DataSetWriterConfig *config);
 
-UA_StatusCode
+UA_StatusCode UA_EXPORT
 UA_Server_removeDataSetWriter(UA_Server *server, const UA_NodeId dsw);
+
+#endif /* UA_ENABLE_PUBSUB */
     
-#ifdef __cplusplus
-} // extern "C"
-#endif
+_UA_END_DECLS
 
 #endif /* UA_SERVER_PUBSUB_H */

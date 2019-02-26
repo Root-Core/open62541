@@ -8,15 +8,15 @@
 #ifndef UA_PUBSUB_H_
 #define UA_PUBSUB_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include "../deps/queue.h"
 #include "ua_plugin_pubsub.h"
 #include "ua_pubsub_networkmessage.h"
 #include "ua_server.h"
 #include "ua_server_pubsub.h"
+#include "open62541_queue.h"
+
+_UA_BEGIN_DECLS
+
+#ifdef UA_ENABLE_PUBSUB /* conditional compilation */
 
 //forward declarations
 struct UA_WriterGroup;
@@ -95,8 +95,6 @@ UA_StatusCode
 UA_DataSetWriterConfig_copy(const UA_DataSetWriterConfig *src, UA_DataSetWriterConfig *dst);
 UA_DataSetWriter *
 UA_DataSetWriter_findDSWbyId(UA_Server *server, UA_NodeId identifier);
-void
-UA_DataSetWriter_deleteMembers(UA_Server *server, UA_DataSetWriter *dataSetWriter);
 
 /**********************************************/
 /*               WriterGroup                  */
@@ -118,8 +116,6 @@ UA_StatusCode
 UA_WriterGroupConfig_copy(const UA_WriterGroupConfig *src, UA_WriterGroupConfig *dst);
 UA_WriterGroup *
 UA_WriterGroup_findWGbyId(UA_Server *server, UA_NodeId identifier);
-void
-UA_WriterGroup_deleteMembers(UA_Server *server, UA_WriterGroup *writerGroup);
 
 /**********************************************/
 /*               DataSetField                 */
@@ -140,8 +136,6 @@ UA_StatusCode
 UA_DataSetFieldConfig_copy(const UA_DataSetFieldConfig *src, UA_DataSetFieldConfig *dst);
 UA_DataSetField *
 UA_DataSetField_findDSFbyId(UA_Server *server, UA_NodeId identifier);
-void
-UA_DataSetField_deleteMembers(UA_DataSetField *field);
 
 /*********************************************************/
 /*               PublishValues handling                  */
@@ -152,8 +146,8 @@ UA_WriterGroup_addPublishCallback(UA_Server *server, UA_WriterGroup *writerGroup
 void
 UA_WriterGroup_publishCallback(UA_Server *server, UA_WriterGroup *writerGroup);
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
+#endif /* UA_ENABLE_PUBSUB */
+
+_UA_END_DECLS
 
 #endif /* UA_PUBSUB_H_ */

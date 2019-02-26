@@ -1,4 +1,4 @@
-#!/usr/bin/env/python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 ###
@@ -19,30 +19,30 @@
 ###
 
 from __future__ import print_function
-import string
 from os.path import basename
 import logging
 import codecs
+import os
 try:
     from StringIO import StringIO
 except ImportError:
     from io import StringIO
 
+import sys
+if sys.version_info[0] >= 3:
+    # strings are already parsed to unicode
+    def unicode(s):
+        return s
+
 logger = logging.getLogger(__name__)
 
+from datatypes import NodeId
 from nodes import *
 from nodeset import *
 from backend_open62541_nodes import generateNodeCode_begin, generateNodeCode_finish, generateReferenceCode
 
 # Kahn's algorithm: https://algocoding.wordpress.com/2015/04/05/topological-sorting-python/
 def sortNodes(nodeset):
-
-    # Ensure that every reference has an inverse reference in the target
-    for u in nodeset.nodes.values():
-        for ref in u.references:
-            back = Reference(ref.target, ref.referenceType, ref.source, not ref.isForward)
-            nodeset.nodes[ref.target].references.add(back) # ref set does not make a duplicate entry
-
     # reverse hastypedefinition references to treat only forward references
     hasTypeDef = NodeId("ns=0;i=40")
     for u in nodeset.nodes.values():
@@ -72,8 +72,8 @@ def sortNodes(nodeset):
     # used in a reference, it must exist. A Variable node may point to a
     # DataTypeNode in the datatype attribute and not via an explicit reference.
 
-    Q = {node for node in R.values() if in_degree[node.id] == 0 and
-         (isinstance(node, ReferenceTypeNode) or isinstance(node, DataTypeNode))}
+    Q = [node for node in R.values() if in_degree[node.id] == 0 and
+         (isinstance(node, ReferenceTypeNode) or isinstance(node, DataTypeNode))]
     while Q:
         u = Q.pop() # choose node of zero in-degree and 'remove' it from graph
         L.append(u)
@@ -88,10 +88,10 @@ def sortNodes(nodeset):
                 continue
             in_degree[ref.target] -= 1
             if in_degree[ref.target] == 0:
-                Q.add(R[ref.target])
+                Q.append(R[ref.target])
 
     # Order the remaining nodes
-    Q = {node for node in R.values() if in_degree[node.id] == 0}
+    Q = [node for node in R.values() if in_degree[node.id] == 0]
     while Q:
         u = Q.pop() # choose node of zero in-degree and 'remove' it from graph
         L.append(u)
@@ -106,7 +106,7 @@ def sortNodes(nodeset):
                 continue
             in_degree[ref.target] -= 1
             if in_degree[ref.target] == 0:
-                Q.add(R[ref.target])
+                Q.append(R[ref.target])
 
     # reverse hastype references
     for u in nodeset.nodes.values():
@@ -130,7 +130,7 @@ def sortNodes(nodeset):
 # Generate C Code #
 ###################
 
-def generateOpen62541Code(nodeset, outfilename, generate_ns0=False, internal_headers=False, typesArray=[], max_string_length=0):
+def generateOpen62541Code(nodeset, outfilename, generate_ns0=False, internal_headers=False, typesArray=[], encode_binary_size=32000):
     outfilebase = basename(outfilename)
     # Printing functions
     outfileh = codecs.open(outfilename + ".h", r"w+", encoding='utf-8')
@@ -158,10 +158,7 @@ def generateOpen62541Code(nodeset, outfilename, generate_ns0=False, internal_hea
 """ % (outfilebase.upper(), outfilebase.upper()))
     if internal_headers:
         writeh("""
-#ifdef UA_NO_AMALGAMATION
-# include "ua_server.h"
-# include "ua_types_encoding_binary.h"
-#else
+#ifdef UA_ENABLE_AMALGAMATION
 # include "open62541.h"
 
 /* The following declarations are in the open62541.c file so here's needed when compiling nodesets externally */
@@ -190,24 +187,27 @@ UA_findDataTypeByBinary(const UA_NodeId *typeId);
 
 # endif // UA_Nodestore_remove
 
+#else // UA_ENABLE_AMALGAMATION
+# include "ua_server.h"
 #endif
 
 %s
 """ % (additionalHeaders))
     else:
         writeh("""
-#include "open62541.h"
-""")
-    writeh("""
-#ifdef __cplusplus
-extern "C" {
+#ifdef UA_ENABLE_AMALGAMATION
+# include "open62541.h"
+#else
+# include "ua_server.h"
 #endif
+%s
+""" % (additionalHeaders))
+    writeh("""
+_UA_BEGIN_DECLS
 
 extern UA_StatusCode %s(UA_Server *server);
 
-#ifdef __cplusplus
-}
-#endif
+_UA_END_DECLS
 
 #endif /* %s_H_ */""" % \
            (outfilebase, outfilebase.upper()))
@@ -234,12 +234,16 @@ extern UA_StatusCode %s(UA_Server *server);
         parentref = node.popParentRef(parentreftypes)
         if not node.hidden:
             writec("\n/* " + str(node.displayName) + " - " + str(node.id) + " */")
-            code = generateNodeCode_begin(node, nodeset, max_string_length, generate_ns0, parentref)
+            code_global = []
+            code = generateNodeCode_begin(node, nodeset, generate_ns0, parentref, encode_binary_size, code_global)
             if code is None:
                 writec("/* Ignored. No parent */")
                 nodeset.hide_node(node.id)
                 continue
             else:
+                if len(code_global) > 0:
+                    writec("\n".join(code_global))
+                    writec("\n")
                 writec("\nstatic UA_StatusCode function_" + outfilebase + "_" + str(functionNumber) + "_begin(UA_Server *server, UA_UInt16* ns) {")
                 if isinstance(node, MethodNode):
                     writec("#ifdef UA_ENABLE_METHODCALLS")
@@ -295,10 +299,15 @@ UA_StatusCode retVal = UA_STATUSCODE_GOOD;""" % (outfilebase))
         writec("retVal |= function_" + outfilebase + "_" + str(i) + "_finish(server, ns);")
 
     writec("return retVal;\n}")
+    outfileh.flush()
+    os.fsync(outfileh)
     outfileh.close()
     fullCode = outfilec.getvalue()
     outfilec.close()
 
     outfilec = codecs.open(outfilename + ".c", r"w+", encoding='utf-8')
     outfilec.write(fullCode)
+    outfilec.flush()
+    os.fsync(outfilec)
     outfilec.close()
+
